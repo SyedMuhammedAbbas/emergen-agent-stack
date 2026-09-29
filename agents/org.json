@@ -1,0 +1,66 @@
+{
+  "commonSkills": ["paperclip", "emergen-no-slop", "verification-before-completion"],
+  "routerEnv": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS": "1",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "160000",
+    "ENABLE_TOOL_SEARCH": "true"
+  },
+  "agents": [
+    {
+      "key": "manager", "name": "Manager", "role": "pm", "title": "Engineering Manager", "icon": "brain",
+      "model": "claude-sonnet-5", "router": false, "reportsTo": null, "budgetCents": 3000, "heartbeat": true,
+      "skills": ["emergen-delivery-gate", "writing-plans", "paperclip-converting-plans-to-tasks"]
+    },
+    {
+      "key": "cto", "name": "CTO", "role": "cto", "title": "Chief Technology Officer", "icon": "lightbulb",
+      "model": "claude-opus-5-5", "router": false, "reportsTo": "manager", "budgetCents": 3000,
+      "skills": ["emergen-engineering", "architecture", "system-design", "testing-strategy", "writing-plans"]
+    },
+    {
+      "key": "frontend", "name": "Frontend Engineer", "role": "engineer", "title": "Frontend Engineer", "icon": "code",
+      "model": null, "router": true, "reportsTo": "manager", "budgetCents": 6000,
+      "skills": ["emergen-engineering", "emergen-delivery-gate", "ui-ux-pro-max", "apple-design", "next-best-practices",
+                 "vercel-react-best-practices", "vercel-react-native-skills", "accessibility-review", "ux-copy",
+                 "test-driven-development", "systematic-debugging", "receiving-code-review"]
+    },
+    {
+      "key": "backend", "name": "Backend Engineer", "role": "engineer", "title": "Backend Engineer", "icon": "terminal",
+      "model": null, "router": true, "reportsTo": "manager", "budgetCents": 6000,
+      "skills": ["emergen-engineering", "emergen-delivery-gate", "system-design", "test-driven-development",
+                 "systematic-debugging", "receiving-code-review"]
+    },
+    {
+      "key": "devops", "name": "DevOps Engineer", "role": "devops", "title": "DevOps Engineer", "icon": "wrench",
+      "model": null, "router": true, "reportsTo": "manager", "budgetCents": 3000,
+      "skills": ["emergen-engineering", "emergen-delivery-gate", "deploy-checklist", "incident-response",
+                 "systematic-debugging", "receiving-code-review"]
+    },
+    {
+      "key": "secops", "name": "SecOps Engineer", "role": "security", "title": "Security Engineer", "icon": "shield",
+      "model": "claude-opus-5-5", "router": false, "reportsTo": "manager", "budgetCents": 3000,
+      "skills": ["emergen-engineering", "emergen-delivery-gate", "code-review", "systematic-debugging", "receiving-code-review"]
+    },
+    {
+      "key": "qa", "name": "QA", "role": "qa", "title": "QA Engineer", "icon": "search",
+      "model": "claude-sonnet-5", "router": false, "reportsTo": "manager", "budgetCents": 3000,
+      "skills": ["emergen-engineering", "emergen-delivery-gate", "testing-strategy", "code-review",
+                 "accessibility-review", "systematic-debugging"]
+    },
+    {
+      "key": "ux", "name": "UX Reviewer", "role": "designer", "title": "UX Reviewer", "icon": "eye",
+      "model": "claude-sonnet-5", "router": false, "reportsTo": "manager", "budgetCents": 2000,
+      "skills": ["emergen-delivery-gate", "ui-ux-pro-max", "apple-design", "design-critique", "accessibility-review", "ux-copy"]
+    },
+    {
+      "key": "docs", "name": "Docs", "role": "general", "title": "Documentation Writer", "icon": "sparkles",
+      "model": "claude-haiku-4-5", "router": false, "reportsTo": "manager", "budgetCents": 1000,
+      "skills": ["documentation-writer", "ux-copy"]
+    },
+    {
+      "key": "estimator", "name": "Estimator", "role": "pm", "title": "Solutions Estimator", "icon": "rocket",
+      "model": "claude-opus-5-5", "router": false, "reportsTo": "manager", "budgetCents": 2000,
+      "skills": ["emergen-project-estimation", "xlsx", "emergen-engineering", "system-design", "writing-plans"]
+    }
+  ]
+}
