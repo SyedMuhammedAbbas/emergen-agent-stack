@@ -133,4 +133,13 @@ for key in $(jq -r '.agents[] | select(.routine) | .key' "$ORG"); do
   printf '  routine  %-18s %s (%s)\n' "$(jq -r .title <<<"$r")" "$cron" "${TIMEZONE:-UTC}"
 done
 
+# Stop hook: agents may not end a run while a build/test they started is still running
+mkdir -p ~/.claude/hooks
+install -m 755 "$REPO_DIR/wsl/hooks/wait-for-background.sh" ~/.claude/hooks/wait-for-background.sh
+[ -f ~/.claude/settings.json ] || echo '{}' > ~/.claude/settings.json
+tmp=$(mktemp)
+jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$HOME/.claude/hooks/wait-for-background.sh","timeout":30}]}]' \
+  ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json
+log "stop hook installed"
+
 log "org ready. Agent ids: $IDS_FILE"
