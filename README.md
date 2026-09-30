@@ -141,6 +141,7 @@ Then give the agents work in any of these ways:
 | `TIMESHEET_SCHEDULE`, default 18:30 Mon-Sat | The **Timekeeper** agent reads your commits across `PROJECTS_ROOT` for the day, matches them to Odoo tasks (creating sub-tasks under the right main task and milestone, assigned to you, when none exists), splits `DAILY_HOURS` across them, and posts one 📝 proposal | #approvals |
 | `DIGEST_SCHEDULE`, default 18:45 Mon-Sat | Digest of the agents' own work, plus any open proposals | #approvals |
 | Any time | Reply `approve N` / `reject N`; only then is Odoo written | #approvals |
+| Every 5 min | **Disk guard**: below `DISK_MIN_FREE_GB` (4) free on C: it pauses all agents and alerts you, because WSL's disk file lives on C: and turns read-only when C: fills. Above `DISK_RESUME_FREE_GB` (6) it resumes them and restarts the tasks it interrupted | #agent-questions |
 
 Personal projects (the Personal category) are never logged to Odoo. To backfill a missed day, assign an issue "Daily timesheets YYYY-MM-DD" to the Timekeeper, or ask Hermes in #approvals.
 

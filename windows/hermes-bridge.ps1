@@ -16,7 +16,7 @@ foreach ($k in 'ODOO_URL', 'ODOO_DB', 'ODOO_USERNAME', 'ODOO_API_KEY') {
 $scripts = Join-Path $hh 'scripts'; New-Item -ItemType Directory -Force $scripts | Out-Null
 Copy-Item "$RepoDir\hermes\agent_ops.py" $scripts -Force
 # one cron entry point per command (Hermes cron scripts take no arguments; the file name picks the command)
-$jobCommands = 'intake', 'questions', 'proposals', 'digest', 'standup'
+$jobCommands = 'intake', 'questions', 'proposals', 'digest', 'standup', 'diskguard'
 foreach ($c in $jobCommands) { Copy-Item "$RepoDir\hermes\agent_job.py" (Join-Path $scripts "agent_$c.py") -Force }
 $skillDir = Join-Path $hh 'skills\productivity\agent-ops'; New-Item -ItemType Directory -Force $skillDir | Out-Null
 # pre-1.0 installs used this name; two copies would give Hermes two competing skills
@@ -46,6 +46,8 @@ $json = [ordered]@{
     standup_name       = $cfg.STANDUP_NAME
     standup_active_stages = $(if ($cfg.STANDUP_ACTIVE_STAGES) { $cfg.STANDUP_ACTIVE_STAGES } else { 'To Do,Doing,In Dev,In Progress,Working on,QA Issues' })
     workdays           = $(if ($cfg.WORKDAYS) { $cfg.WORKDAYS } else { '0,1,2,3,4,5' })
+    disk_min_free_gb   = $(if ($cfg.DISK_MIN_FREE_GB) { $cfg.DISK_MIN_FREE_GB } else { '4' })
+    disk_resume_free_gb = $(if ($cfg.DISK_RESUME_FREE_GB) { $cfg.DISK_RESUME_FREE_GB } else { '6' })
 } | ConvertTo-Json
 [IO.File]::WriteAllText($cfgFile, $json, $utf8)
 Write-Step "wrote $cfgFile (project_map preserved)"
@@ -70,6 +72,7 @@ $jobs = @(
     @{ name = 'agent-proposals'; schedule = 'every 5m';           channel = Channel 'DISCORD_APPROVALS_CHANNEL_ID' }
     @{ name = 'agent-digest';    schedule = $cfg.DIGEST_SCHEDULE; channel = Channel 'DISCORD_APPROVALS_CHANNEL_ID' }
     @{ name = 'agent-standup';   schedule = $cfg.STANDUP_SCHEDULE; channel = Channel 'DISCORD_STANDUP_CHANNEL_ID' }
+    @{ name = 'agent-diskguard'; schedule = 'every 5m';           channel = Channel 'DISCORD_QUESTIONS_CHANNEL_ID' }
 )
 # "  <12-hex id> [state]" followed by "    Name:      <name>"
 $listing = (hermes cron list 2>&1) -join "`n"

@@ -4,6 +4,7 @@ Subcommands
   init                        Check Odoo/Paperclip access (read-only); queues a proposal if the intake tag is missing
   propose --file p.json       Queue any other Odoo change (tasks, timesheets, stages, notes) for approval in Discord
   proposals / questions       Relay new proposals / agent questions (cron; empty output when nothing new)
+  diskguard                   Pause all agents when C: runs low, resume + restart their tasks when space is back (cron)
   standup                     Daily standup text: yesterday's timesheets, active tasks, blockers (read-only)
   odoo projects|project <id>|tasks <project_id> [--mine] [--open]|timesheets <from> [<to>]
                               Read-only Odoo lookups as JSON, for agents preparing proposals
@@ -126,6 +127,18 @@ class Paperclip:
 
     def comment(self, issue_id, text):
         return self._req("POST", f"/issues/{issue_id}/comments", {"body": text})
+
+    def issue(self, issue_id):
+        return self._req("GET", f"/issues/{issue_id}")
+
+    def agents(self):
+        return self._req("GET", f"/companies/{self.cid}/agents") or []
+
+    def pause(self, agent_id):
+        return self._req("POST", f"/agents/{agent_id}/pause", {})
+
+    def resume(self, agent_id):
+        return self._req("POST", f"/agents/{agent_id}/resume", {})
 
 
 class Odoo:
@@ -690,6 +703,58 @@ def cmd_odoo(args):
     print(json.dumps(out, indent=1, default=str))
 
 
+# ---------- disk guard: WSL's disk file lives on this drive and goes read-only if the drive fills ----------
+
+def cmd_diskguard(cfg):
+    import shutil
+    drive = cfg.get("disk_guard_drive") or "C:\\"
+    low, high = float(cfg.get("disk_min_free_gb") or 4), float(cfg.get("disk_resume_free_gb") or 6)
+    free = shutil.disk_usage(drive).free / 1024 ** 3
+    st = read_state("diskguard", {})
+    now = dt.datetime.now()
+    pc = Paperclip(cfg)
+
+    if not st.get("paused") and free < low:
+        agents = [a for a in pc.agents() if a.get("status") not in ("paused", "terminated")]
+        ids = {a["id"] for a in agents}
+        active = [{"id": i["id"], "identifier": i.get("identifier"), "assignee": i.get("assigneeAgentId")}
+                  for i in pc.issues() if i.get("assigneeAgentId") in ids and i.get("status") in ("todo", "in_progress")]
+        for a in agents:
+            pc.pause(a["id"])
+        write_state("diskguard", {"paused": [a["id"] for a in agents], "issues": active,
+                                  "at": now.isoformat(timespec="minutes"), "alerted": now.isoformat()})
+        print(f"🛑 **Disk guard: {drive} has {free:.1f} GB free** (limit {low:g} GB). Paused {len(agents)} agents "
+              f"({len(active)} tasks waiting) so WSL's disk can't fill up and go read-only.\n"
+              f"Free space on {drive} (Disk Cleanup, Docker images, the Android emulator). Agents resume automatically "
+              f"above {high:g} GB, and their interrupted tasks restart.")
+    elif st.get("paused") and free >= high:
+        for aid in st["paused"]:
+            try:
+                pc.resume(aid)
+            except Exception as e:  # an agent deleted meanwhile must not block the rest
+                print(f"could not resume {aid}: {e}", file=sys.stderr)
+        restarted = 0
+        for rec in st.get("issues", []):
+            try:
+                cur = pc.issue(rec["id"])
+            except Exception:
+                continue
+            if cur and cur.get("status") == "blocked":
+                pc.comment(rec["id"], "**Board:** this run was interrupted by the disk guard pausing the agents, not by a "
+                                      "problem with the task. Start again from the beginning, following the description.")
+                pc.update_issue(rec["id"], {"status": "todo", "assigneeAgentId": rec["assignee"]})
+                restarted += 1
+        write_state("diskguard", {})
+        print(f"✅ **Disk guard: {drive} has {free:.1f} GB free.** Resumed {len(st['paused'])} agents and restarted {restarted} interrupted tasks.")
+    elif st.get("paused"):
+        last = dt.datetime.fromisoformat(st.get("alerted", st["at"]))
+        if now - last >= dt.timedelta(hours=2):  # gentle reminder, not every 5 minutes
+            st["alerted"] = now.isoformat()
+            write_state("diskguard", st)
+            print(f"🛑 Disk guard: agents still paused since {st['at']}; {drive} has {free:.1f} GB free, "
+                  f"needs {high:g} GB to resume.")
+
+
 # ---------- daily standup (read-only) ----------
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"]
@@ -789,6 +854,8 @@ def main(argv):
             print("\n\n".join(out))
     elif cmd == "standup":
         cmd_standup(cfg)
+    elif cmd == "diskguard":
+        cmd_diskguard(cfg)
     elif cmd == "odoo":
         cmd_odoo(args)
     elif cmd == "propose":
