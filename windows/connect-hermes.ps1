@@ -60,6 +60,15 @@ if ($fromWsl -notmatch '^\d{3}$' -or $fromWsl -eq '000') { throw "Paperclip (WSL
 Write-Step "reachable from WSL (HTTP $fromWsl)"
 
 # ---- 4. Paperclip agent ----
+# After 'wsl --shutdown' the keepalive task is gone until logon, and Paperclip needs up to ~2 minutes to start.
+if ((Get-ScheduledTask -TaskName 'WSL-Agents-Keepalive' -ErrorAction SilentlyContinue).State -ne 'Running') {
+    Start-ScheduledTask -TaskName 'WSL-Agents-Keepalive'
+}
+$up = $false
+for ($i = 0; $i -lt 60 -and -not $up; $i++) {
+    try { Invoke-WebRequest "$api/health" -UseBasicParsing -TimeoutSec 3 | Out-Null; $up = $true } catch { Start-Sleep 3 }
+}
+if (-not $up) { throw "Paperclip is not answering on $api after 3 minutes (wsl: paperclipai service logs)" }
 $idsJson = ((& wsl.exe -d $cfg.WSL_DISTRO -u $cfg.WSL_USER -- cat "/home/$($cfg.WSL_USER)/.agent-stack/ids.json") -replace "`0", '' | Where-Object { $_ -notmatch 'Failed to mount' }) -join "`n"
 $ids = $idsJson | ConvertFrom-Json
 if (-not $ids.company -or -not $ids.manager) { throw "run install.ps1 first (Paperclip ids missing)" }
