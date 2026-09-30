@@ -58,6 +58,13 @@
       "skills": ["documentation-writer", "ux-copy"]
     },
     {
+      "key": "timekeeper", "name": "Timekeeper", "role": "general", "title": "Timesheets and standups", "icon": "star",
+      "model": "claude-sonnet-5", "router": false, "reportsTo": "manager", "budgetCents": 1500,
+      "skills": ["daily-timesheets"],
+      "routine": {"title": "Daily timesheets", "cronEnv": "TIMESHEET_SCHEDULE",
+                  "description": "Prepare today's timesheet proposal with the daily-timesheets skill. Date: the day this issue was created (local time)."}
+    },
+    {
       "key": "estimator", "name": "Estimator", "role": "pm", "title": "Solutions Estimator", "icon": "rocket",
       "model": "claude-opus-5-5", "router": false, "reportsTo": "manager", "budgetCents": 2000,
       "skills": ["project-estimation", "xlsx", "{{ENGINEERING_SKILL}}", "system-design", "writing-plans"]

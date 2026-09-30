@@ -95,22 +95,28 @@ Open http://localhost:3100: the org chart shows all 10 agents. With the bridge, 
 
 ## Working on a project
 
-Agents need a repo to work in. Connect each project once:
+Agents need a repo to work in. Connect each project once, either with your existing local checkouts or with fresh clones:
 
 ```powershell
-.\connect-project.ps1 -Name NeuraX -Base staging `
-    -Repo Emergen-Tech/neurax-backend, Emergen-Tech/neurax-dashboard, Emergen-Tech/neurax-app `
-    -OdooProject NeuraX
+# your checkouts on D:, linked to Odoo project 91
+.\connect-project.ps1 -Name NeuraX -Base staging -OdooProjectId 91 `
+    -LocalPath D:\Projects\Emergen\NeuraX\neurax-backend, D:\Projects\Emergen\NeuraX\neurax-dashboard, D:\Projects\Emergen\NeuraX\neurax-app
+
+# or fresh clones inside WSL
+.\connect-project.ps1 -Name NeuraX -Base staging -OdooProjectId 91 -Repo Emergen-Tech/neurax-backend, Emergen-Tech/neurax-app
 ```
 
 | Parameter | Meaning |
 |---|---|
 | `-Name` | Paperclip project name |
-| `-Repo` | GitHub `owner/repo` or git URL; several allowed, the first is the primary workspace |
+| `-LocalPath` | Your existing git checkouts (Windows paths); several allowed |
+| `-Repo` | GitHub `owner/repo` or git URL to clone into WSL instead; several allowed |
 | `-Base` | Branch agents branch from and open PRs against (default: each repo's default branch) |
-| `-OdooProject` | Optional. Odoo tickets tagged `agent-ready` in this Odoo project are filed under this Paperclip project |
+| `-OdooProjectId` | Odoo project id. Tickets tagged `agent-ready` there go to this Paperclip project, and the Timekeeper logs your time for these repos against it (`-OdooProject <name>` also works) |
 
-What it does: clones the repos into `~/projects/<name>/` inside WSL (Linux filesystem, much faster than `/mnt/c` or `/mnt/d`), creates the Paperclip project with the Manager as lead, attaches each repo as a workspace, and turns on isolated git worktrees so every issue gets its own checkout and branch. Re-running it fetches and updates without duplicating anything. Your own working copies on Windows are never touched.
+What it does: creates the Paperclip project with the Manager as lead, attaches each repo as a workspace, and turns on isolated git worktrees: every issue gets its own folder and branch under `~/projects/<name>/.worktrees` in WSL. With `-LocalPath` the agents share your repo's history and branches (you see their branches locally) but never touch your working files. Re-running it updates without duplicating anything.
+
+**Main tasks and sub-tasks.** Tag an Odoo main task `agent-ready`: it becomes a parent issue the Manager splits into sub-issues. Tagged Odoo sub-tasks nest under their main task's issue. When sub-tasks are missing in Odoo, the Manager has Ops (Hermes) propose them under the main task, with its milestone, assigned to you; you approve in Discord.
 
 Then give the agents work in any of these ways:
 
@@ -126,6 +132,25 @@ Then give the agents work in any of these ways:
 | Change something in Odoo | Ask Hermes in Discord ("log 3h on task 28034 for yesterday", "create a ticket for X and log 2h"). It replies with a 📝 proposal; `approve N` writes it |
 | Start a brand-new client project | Discord `new project: <name>` with the requirements (bridge), or a Paperclip issue titled `New project: <name>` assigned to the Estimator. It asks which category, then writes `<PROJECTS_ROOT>/<category>/<name>/` with the requirements and an estimation `.xlsx` |
 | Watch agents work | Paperclip issue page (live transcript), agent page (runs, cost), http://127.0.0.1:4100 (router decisions) |
+
+## Your daily routine (bridge)
+
+| When (config.env) | What | Where |
+|---|---|---|
+| `STANDUP_SCHEDULE`, default 11:30 Mon-Sat | Standup text to copy: **Completed** (previous working day's timesheets), **Working on** (your tasks in active stages), **Blockers** (tasks in a blocked/on-hold stage), each with `#ticket` and project | #standup |
+| `TIMESHEET_SCHEDULE`, default 18:30 Mon-Sat | The **Timekeeper** agent reads your commits across `PROJECTS_ROOT` for the day, matches them to Odoo tasks (creating sub-tasks under the right main task and milestone, assigned to you, when none exists), splits `DAILY_HOURS` across them, and posts one 📝 proposal | #approvals |
+| `DIGEST_SCHEDULE`, default 18:45 Mon-Sat | Digest of the agents' own work, plus any open proposals | #approvals |
+| Any time | Reply `approve N` / `reject N`; only then is Odoo written | #approvals |
+
+Personal projects (the Personal category) are never logged to Odoo. To backfill a missed day, assign an issue "Daily timesheets YYYY-MM-DD" to the Timekeeper, or ask Hermes in #approvals.
+
+## Discord channels
+
+```powershell
+.\windows\discord-channels.ps1 -GuildId <your server id>
+```
+
+Creates an **Agent Ops** category with `#approvals`, `#agent-questions`, `#standup`, `#agent-activity` and `#new-projects` (reusing any that exist), saves their ids in `config.env`, points every Hermes job at the right one, and lets Hermes answer in the channels you type in without an @mention. The bot needs the **Manage Channels** permission (Server Settings, Roles, the bot's role). Without it, create the channels yourself and put their ids in `config.env` (`DISCORD_*_CHANNEL_ID`), then run `.\windows\hermes-bridge.ps1`.
 
 ## Hermes as an agent in Paperclip (optional)
 
@@ -184,7 +209,9 @@ windows/wsl-host.ps1        .wslconfig + WSL keepalive task
 windows/hermes-bridge.ps1   bridge scripts, Hermes skill, config, Odoo tags, cron jobs, gateway watchdog
 windows/collect-skills.ps1  gathers third-party skills into SKILLS_SOURCE
 windows/connect-hermes.ps1  optional: Hermes as the "Ops (Hermes)" Paperclip agent
-hermes/agent_ops.py         Odoo <-> Paperclip bridge (intake, digest, propose, approve/edit/reject, answer, newproject)
+windows/discord-channels.ps1  Agent Ops category + channels, ids into config.env
+hermes/agent_ops.py         Odoo <-> Paperclip bridge (intake, digest, standup, propose, approve/edit/reject, odoo lookups, answer, newproject)
+hermes/agent_job.py         cron entry point, installed once per job as agent_<command>.py
 docs/operations.md          health checks, troubleshooting, backups
 ```
 

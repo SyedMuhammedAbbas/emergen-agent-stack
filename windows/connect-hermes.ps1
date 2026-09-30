@@ -79,7 +79,8 @@ $adapterConfig = [ordered]@{
     apiBaseUrl = $hermesApi; apiKey = $key; paperclipApiUrl = 'http://127.0.0.1:3100'
     sessionKeyStrategy = 'issue'; timeoutSec = 900; instructions = $instr
 }
-$agents = Invoke-RestMethod "$api/companies/$($ids.company)/agents"
+# PowerShell 5.1 emits a JSON array as one object; ForEach-Object unrolls it
+$agents = (Invoke-RestMethod "$api/companies/$($ids.company)/agents") | ForEach-Object { $_ }
 $existing = @($agents | Where-Object { $_.name -eq 'Ops (Hermes)' }) | Select-Object -First 1
 $body = [ordered]@{
     name = 'Ops (Hermes)'; role = 'general'; title = 'Operations (Odoo, Discord)'; icon = 'zap'
@@ -93,5 +94,9 @@ if ($existing) {
     $created = Invoke-RestMethod -Method Post "$api/companies/$($ids.company)/agents" -ContentType 'application/json; charset=utf-8' -Body $json
     $agentId = $created.id; Write-Step "created agent Ops (Hermes) ($agentId)"
 }
-& wsl.exe -d $cfg.WSL_DISTRO -u $cfg.WSL_USER -- bash -c "f=~/.agent-stack/ids.json; jq --arg v '$agentId' '.ops=`$v' `$f > `$f.tmp && mv `$f.tmp `$f" | Out-Null
+# no double quotes: PowerShell 5.1 mangles them in native-command arguments
+$save = 'f=~/.agent-stack/ids.json; jq --arg v $1 ''.ops=$v'' $f > $f.tmp && mv $f.tmp $f'
+# --exec skips the login shell, which would otherwise expand $f before bash sees it
+& wsl.exe -d $cfg.WSL_DISTRO -u $cfg.WSL_USER --cd / --exec bash -c $save _ $agentId | Out-Null
+if ($LASTEXITCODE) { Write-Warn "could not save the agent id to ~/.agent-stack/ids.json" }
 Write-Step "done. Assign an issue to 'Ops (Hermes)' in Paperclip to try it."

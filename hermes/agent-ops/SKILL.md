@@ -17,6 +17,8 @@ The AI engineering agents (Manager, CTO, Frontend/Backend/DevOps/SecOps Engineer
 
 - **agent-intake** (every 15 min): Odoo tasks tagged `agent-ready` become Paperclip issues `[ODOO-<id>] <name>` for the Manager. Read-only on Odoo. It also relays agent "Question for board" comments (❓) and new proposals (📝).
 - **agent-digest** (daily): numbered list of agent work and open proposals awaiting approval.
+- **agent-standup** (mornings): the user's DSM text to copy. If asked to redo it, run `standup` and post the output.
+- The **Timekeeper** agent in Paperclip proposes the user's own timesheets at day end; it appears as a 📝 proposal.
 
 Script:
 
@@ -28,7 +30,7 @@ Script:
 
 Examples: "log 3h on NeuraX task 28034 for yesterday", "fix the 16th sep hours to 8", "move 28020 to Testing", "create a ticket for the payment fix and log 2h".
 
-1. Read what you need with your read-only Odoo tools (task ids, existing timesheets on those dates so you don't double-log, stage names).
+1. Read what you need with your read-only Odoo tools or `agent_ops.py odoo projects | project <id> | tasks <project_id> --mine | timesheets <date>` (task ids, main tasks and milestones, existing timesheets on those dates so you don't double-log, stage names).
 2. Write a proposal JSON to `{{HERMES_HOME}}\state\agent_ops\proposal-<short-name>.json`:
 
 ```json
@@ -41,7 +43,7 @@ Examples: "log 3h on NeuraX task 28034 for yesterday", "fix the 16th sep hours t
 ]}
 ```
 
-   `task` is an Odoo task id, or the `ref` of a `create_task` in the same proposal. Timesheets are logged under **{{TIMESHEET_EMPLOYEE}}**. Changing or deleting existing timesheet lines is not supported: say so, and propose only new lines.
+   `task` is an Odoo task id, or the `ref` of a `create_task` in the same proposal. Prefer `project_id` over `project`. New tickets are **sub-tasks**: set `parent` to the main task of that area and `milestone` to the main task's milestone (look both up with `agent_ops.py odoo project <id>`); new tasks are assigned to the user automatically. To fix an existing task: `{"type": "update_task", "task": 28034, "parent": 27729, "milestone": "M9 - Seller and Admin Backend", "assign_me": true}`. Timesheets are logged under **{{TIMESHEET_EMPLOYEE}}**. Changing or deleting existing timesheet lines is not supported: say so, and propose only new lines.
 3. Run `propose --file <that path> --from-chat` and post its output verbatim. It ends with "Reply `approve N`".
 4. Stop. Do nothing more until the user replies.
 

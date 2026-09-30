@@ -3,7 +3,11 @@
 Subcommands
   init                        Check Odoo/Paperclip access (read-only); queues a proposal if the intake tag is missing
   propose --file p.json       Queue any other Odoo change (tasks, timesheets, stages, notes) for approval in Discord
-  intake                    Odoo tasks tagged agent-ready -> Paperclip issues (assigned to Manager)
+  proposals / questions       Relay new proposals / agent questions (cron; empty output when nothing new)
+  standup                     Daily standup text: yesterday's timesheets, active tasks, blockers (read-only)
+  odoo projects|project <id>|tasks <project_id> [--mine] [--open]|timesheets <from> [<to>]
+                              Read-only Odoo lookups as JSON, for agents preparing proposals
+  intake                   Odoo tasks tagged agent-ready -> Paperclip issues (assigned to Manager)
   digest                      Build the daily approval digest from agents' "Run summary" comments
   approve 1,3                 Write timesheets / stage / chatter to Odoo for digest items
   edit 2 hours=1.5 [stage=X]  Adjust an item, then approve it
@@ -39,8 +43,13 @@ DEFAULT_CONFIG = {
     "estimator_agent_id": "",
     "ready_tag": "agent-ready",
     "timesheet_employee": "",
-    # Odoo project name -> Paperclip project id (fill in once repos are attached)
+    # Odoo project id (or name) -> Paperclip project id; written by connect-project.ps1
     "project_map": {},
+    "standup_title": "DSM",
+    "standup_name": "",
+    "standup_active_stages": "To Do,Doing,In Dev,In Progress,Working on,QA Issues",
+    "standup_recent_days": 7,
+    "workdays": "0,1,2,3,4,5",  # Mon=0 ... Sun=6
 }
 REQUIRED = ("company_id", "manager_agent_id", "estimator_agent_id", "timesheet_employee")
 
@@ -160,9 +169,11 @@ def cmd_intake(cfg):
         tasks = []
     else:
         tasks = odoo.call("project.task", "search_read", [["tag_ids", "in", [ready]]],
-                          fields=["id", "name", "description", "project_id", "stage_id", "date_deadline", "priority"],
+                          fields=["id", "name", "description", "project_id", "stage_id", "date_deadline", "priority", "parent_id"],
                           limit=50)
-    existing = {i.get("billingCode") for i in pc.issues()}  # dedupe on the Paperclip side
+        tasks.sort(key=lambda t: bool(t["parent_id"]))  # main tasks first, so sub-tasks can nest under them
+    issues = pc.issues()
+    existing = {i.get("billingCode") for i in issues}  # dedupe on the Paperclip side
     for t in tasks:
         code = f"ODOO-{t['id']}"
         project = t["project_id"][1] if t["project_id"] else "(no project)"
@@ -184,12 +195,18 @@ def cmd_intake(cfg):
                 "assigneeAgentId": cfg["manager_agent_id"],
                 "billingCode": code,
             }
-            if project in cfg["project_map"]:
-                body["projectId"] = cfg["project_map"][project]
+            pmap = cfg["project_map"]
+            key = str(t["project_id"][0]) if t["project_id"] else ""
+            if key in pmap or project in pmap:  # keyed by Odoo project id (preferred) or name
+                body["projectId"] = pmap.get(key) or pmap[project]
+            if t.get("parent_id"):  # sub-task: nest under the parent's Paperclip issue if it exists
+                parent_code = f"ODOO-{t['parent_id'][0]}"
+                parent = next((i for i in issues if i.get("billingCode") == parent_code), None)
+                if parent:
+                    body["parentId"] = parent["id"]
             issue = pc.create_issue(body)
+            issues.append(issue)
             lines.append(f"• {code} {t['name']} → Paperclip {issue.get('identifier') or issue.get('id')}")
-    lines += relay_questions(pc)
-    lines += relay_proposals()
     if lines:  # empty stdout = silent run
         print("**Agent intake**\n" + "\n".join(lines))
 
@@ -408,26 +425,41 @@ def approve(cfg, items, dry_run=False):
 #
 # Proposal file (JSON):
 # {"title": "Timesheets 28-29 Sep", "actions": [
-#   {"type": "create_task", "ref": "t1", "project": "NeuraX", "name": "...", "stage": "Code Review", "description": "..."},
+#   {"type": "create_task", "ref": "t1", "project_id": 91, "name": "...", "parent": 27744, "milestone": "M9 - Seller and Admin Backend",
+#    "stage": "Code Review", "description": "..."},
+#   {"type": "update_task", "task": 28034, "parent": 27744, "milestone": 26, "assign_me": true},
 #   {"type": "timesheet", "date": "2026-09-28", "task": 28034 | "t1", "hours": 2.5, "description": "..."},
 #   {"type": "stage", "task": 28034, "stage": "Testing"},
 #   {"type": "note", "task": 28034, "body": "..."},
 #   {"type": "create_tag", "name": "agent-ready"}]}
-# "task" may be an Odoo task id or the "ref" of a create_task earlier in the same proposal.
+# "task"/"parent" may be an Odoo task id or the "ref" of a create_task earlier in the same proposal.
+# "project" (name) or "project_id"; "milestone" by id or exact name. New tasks are assigned to the bridge's
+# Odoo user (you) unless "assign_me": false.
 
-ACTION_TYPES = {"create_task", "timesheet", "stage", "note", "create_tag"}
+ACTION_TYPES = {"create_task", "update_task", "timesheet", "stage", "note", "create_tag"}
+
+
+def _task_label(ref) -> str:
+    return f"#{ref}" if isinstance(ref, int) else f"new task {ref}"
 
 
 def describe_action(a: dict) -> str:
     t = a["type"]
     if t == "create_task":
-        return f"new task in {a['project']} ({a.get('stage') or 'default stage'}): {a['name']}"
+        extra = [f"under {_task_label(a['parent'])}" if a.get("parent") else "",
+                 f"milestone {a['milestone']}" if a.get("milestone") else "", a.get("stage") or ""]
+        where = a.get("project") or f"project {a.get('project_id')}"
+        return f"new task {a.get('ref', '')} in {where}: {a['name']} ({', '.join(e for e in extra if e) or 'defaults'})"
+    if t == "update_task":
+        parts = [f"parent → {_task_label(a['parent'])}" if a.get("parent") else "",
+                 f"milestone → {a['milestone']}" if a.get("milestone") else "", "assign me" if a.get("assign_me") else ""]
+        return f"task {_task_label(a['task'])}: {', '.join(p for p in parts if p)}"
     if t == "timesheet":
-        return f"{a['date']}  {a['hours']}h on {'task ' + str(a['task']) if isinstance(a['task'], int) else 'new task ' + a['task']}: {a.get('description', '')}"
+        return f"{a['date']}  {a['hours']}h on {_task_label(a['task'])}: {a.get('description', '')}"
     if t == "stage":
-        return f"task {a['task']} stage → {a['stage']}"
+        return f"task {_task_label(a['task'])} stage → {a['stage']}"
     if t == "note":
-        return f"note on task {a['task']}: {a['body'][:120]}"
+        return f"note on task {_task_label(a['task'])}: {a['body'][:120]}"
     return f"create Odoo tag {a['name']}"
 
 
@@ -441,8 +473,11 @@ def cmd_propose(args, from_chat=False):
         raise SystemExit(f"Proposal needs actions of types {sorted(ACTION_TYPES)}; bad: {bad[:2]}")
     refs = {a["ref"] for a in actions if a["type"] == "create_task" and a.get("ref")}
     for a in actions:
-        if isinstance(a.get("task"), str) and a["task"] not in refs:
-            raise SystemExit(f"unknown task ref {a['task']!r}")
+        for k in ("task", "parent"):
+            if isinstance(a.get(k), str) and a[k] not in refs:
+                raise SystemExit(f"unknown task ref {a[k]!r}")
+        if a["type"] == "create_task" and not (a.get("project") or a.get("project_id")):
+            raise SystemExit(f"create_task {a.get('name')!r} needs project or project_id")
     pending = read_state("pending", [])
     n = max([p.get("n", 0) for p in pending] + [0]) + 1
     item = {"kind": "proposal", "issue_id": f"proposal-{dt.datetime.now().strftime('%Y%m%d%H%M%S%f')}", "n": n,
@@ -477,7 +512,10 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
     created, done = {}, []
     project_ids = {}
 
-    def project_id(name):
+    def project_id(a):
+        if a.get("project_id"):
+            return int(a["project_id"])
+        name = a["project"]
         if name not in project_ids:
             ids = odoo.call("project.project", "search", [["name", "=", name]], limit=2)
             if len(ids) != 1:
@@ -488,21 +526,50 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
     def task_id(ref):
         return created.get(ref, ref) if isinstance(ref, str) else ref
 
+    def milestone_id(value, pid):
+        if isinstance(value, int):
+            return value
+        ids = odoo.call("project.milestone", "search", [["project_id", "=", pid], ["name", "=", value]], limit=2)
+        if len(ids) != 1:
+            raise SystemExit(f"milestone '{value}' not found exactly once in project {pid}")
+        return ids[0]
+
+    def task_project(tid):
+        return odoo.call("project.task", "read", [tid], fields=["project_id"])[0]["project_id"][0]
+
     for a in it["actions"]:
         t = a["type"]
         if t == "create_tag":
             if not dry_run and not odoo.tag_id(a["name"]):
                 odoo.call("project.tags", "create", {"name": a["name"]})
         elif t == "create_task":
-            pid = project_id(a["project"])
-            vals = {"name": a["name"], "project_id": pid, "user_ids": [(6, 0, [odoo.uid])]}
+            pid = project_id(a)
+            vals = {"name": a["name"], "project_id": pid}
+            if a.get("assign_me", True):
+                vals["user_ids"] = [(6, 0, [odoo.uid])]
             if a.get("description"):
                 vals["description"] = a["description"]
+            if a.get("parent"):
+                vals["parent_id"] = task_id(a["parent"])
+            if a.get("milestone"):
+                vals["milestone_id"] = milestone_id(a["milestone"], pid)
             if a.get("stage"):
                 sid = odoo.call("project.task.type", "search", [["name", "=", a["stage"]], ["project_ids", "in", [pid]]], limit=1)
                 if sid:
                     vals["stage_id"] = sid[0]
             created[a.get("ref") or a["name"]] = 0 if dry_run else odoo.call("project.task", "create", vals)
+        elif t == "update_task":
+            tid = task_id(a["task"])
+            if not dry_run:
+                vals = {}
+                if a.get("parent"):
+                    vals["parent_id"] = task_id(a["parent"])
+                if a.get("milestone"):
+                    vals["milestone_id"] = milestone_id(a["milestone"], task_project(tid))
+                if a.get("assign_me"):
+                    vals["user_ids"] = [(4, odoo.uid)]
+                if vals:
+                    odoo.call("project.task", "write", [tid], vals)
         elif t == "timesheet":
             tid = task_id(a["task"])
             if not dry_run:
@@ -573,6 +640,115 @@ def cmd_init(cfg):
         print(f"Odoo tag {cfg['ready_tag']} is missing; approve the proposal in Discord to create it.")
 
 
+# ---------- read-only Odoo helpers (JSON on stdout) for agents building proposals ----------
+
+def cmd_odoo(args):
+    """odoo projects | odoo project <id> | odoo tasks <project_id> [--mine] [--open] | odoo timesheets <from> [<to>]"""
+    if not args:
+        raise SystemExit(cmd_odoo.__doc__)
+    odoo, sub = Odoo(), args[0]
+    m2o = lambda v: v[1] if v else None
+    if sub == "projects":
+        out = odoo.call("project.project", "search_read", [["active", "=", True]], fields=["id", "name"], order="name")
+    elif sub == "project":
+        pid = int(args[1])
+        proj = odoo.call("project.project", "read", [pid], fields=["name", "type_ids"])[0]
+        out = {
+            "id": pid, "name": proj["name"],
+            "stages": [s["name"] for s in odoo.call("project.task.type", "read", proj["type_ids"], fields=["name", "sequence"])],
+            "milestones": odoo.call("project.milestone", "search_read", [["project_id", "=", pid]],
+                                    fields=["id", "name", "deadline", "is_reached"], order="deadline"),
+            "main_tasks": [{"id": t["id"], "name": t["name"], "milestone": m2o(t["milestone_id"]), "stage": m2o(t["stage_id"]),
+                            "subtasks": len(t["child_ids"])}
+                           for t in odoo.call("project.task", "search_read", [["project_id", "=", pid], ["parent_id", "=", False]],
+                                              fields=["id", "name", "milestone_id", "stage_id", "child_ids"], order="id desc", limit=300)
+                           if t["child_ids"]],
+        }
+    elif sub == "tasks":
+        dom = [["project_id", "=", int(args[1])]]
+        if "--mine" in args:
+            dom.append(["user_ids", "in", [odoo.uid]])
+        if "--open" in args:
+            dom.append(["stage_id.fold", "=", False])
+        out = [{"id": t["id"], "name": t["name"], "stage": m2o(t["stage_id"]), "milestone": m2o(t["milestone_id"]),
+                "parent": t["parent_id"][0] if t["parent_id"] else None, "parent_name": m2o(t["parent_id"]),
+                "assignees": [u for u in t["user_ids"]], "updated": t["write_date"]}
+               for t in odoo.call("project.task", "search_read", dom,
+                                  fields=["id", "name", "stage_id", "milestone_id", "parent_id", "user_ids", "write_date"],
+                                  order="write_date desc", limit=300)]
+    elif sub == "timesheets":
+        cfg = load_config()
+        emp = find_employee(odoo, cfg["timesheet_employee"])
+        d_from, d_to = args[1], args[2] if len(args) > 2 else args[1]
+        out = [{"date": l["date"], "hours": l["unit_amount"], "project": m2o(l["project_id"]),
+                "task_id": l["task_id"][0] if l["task_id"] else None, "task": m2o(l["task_id"]), "description": l["name"]}
+               for l in odoo.call("account.analytic.line", "search_read",
+                                  [["employee_id", "=", emp], ["date", ">=", d_from], ["date", "<=", d_to]],
+                                  fields=["date", "unit_amount", "project_id", "task_id", "name"], order="date")]
+    else:
+        raise SystemExit(cmd_odoo.__doc__)
+    print(json.dumps(out, indent=1, default=str))
+
+
+# ---------- daily standup (read-only) ----------
+
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"]
+
+
+def _ordinal(n: int) -> str:
+    return f"{n}{'th' if 11 <= n % 100 <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def cmd_standup(cfg):
+    odoo = Odoo()
+    emp = find_employee(odoo, cfg["timesheet_employee"])
+    workdays = {int(d) for d in str(cfg.get("workdays", "0,1,2,3,4,5")).split(",")}  # Mon=0
+    today = dt.date.today()
+    prev = today - dt.timedelta(days=1)
+    while prev.weekday() not in workdays:
+        prev -= dt.timedelta(days=1)
+
+    def group(rows):
+        by_proj = {}
+        for proj, tid, name in rows:
+            entries = by_proj.setdefault(proj or "Other", [])
+            if (tid, name) not in entries:
+                entries.append((tid, name))
+        return by_proj
+
+    done_lines = odoo.call("account.analytic.line", "search_read", [["employee_id", "=", emp], ["date", "=", prev.isoformat()]],
+                           fields=["project_id", "task_id", "name"], order="id")
+    completed = group([(l["project_id"][1] if l["project_id"] else None, l["task_id"][0] if l["task_id"] else None,
+                        l["task_id"][1] if l["task_id"] else l["name"]) for l in done_lines])
+
+    active = [s.strip().lower() for s in cfg.get("standup_active_stages", "").split(",") if s.strip()]
+    since = (today - dt.timedelta(days=int(cfg.get("standup_recent_days", 7)))).isoformat()
+    mine = odoo.call("project.task", "search_read", [["user_ids", "in", [odoo.uid]], ["stage_id.fold", "=", False],
+                                                     ["write_date", ">=", since]],
+                     fields=["id", "name", "project_id", "stage_id"], order="write_date desc", limit=100)
+    done_ids = {tid for rows in completed.values() for tid, _ in rows}
+    working = group([(t["project_id"][1] if t["project_id"] else None, t["id"], t["name"]) for t in mine
+                     if t["stage_id"] and t["stage_id"][1].strip().lower() in active and t["id"] not in done_ids][:12])
+    blocked = group([(t["project_id"][1] if t["project_id"] else None, t["id"], t["name"]) for t in mine
+                     if t["stage_id"] and re.search(r"block|on hold", t["stage_id"][1], re.I)])
+
+    def section(title, by_proj, empty):
+        lines = [f"{title}:"]
+        if not by_proj:
+            return lines + [empty]
+        for proj, rows in by_proj.items():
+            lines.append(f"{proj}:")
+            lines += [f"- #{tid} {name}" if tid else f"- {name}" for tid, name in rows]
+        return lines
+
+    body = [f"{cfg.get('standup_title', 'DSM')} {_ordinal(today.day)} {MONTHS[today.month - 1]} {today.year}", "",
+            cfg.get("standup_name", ""), ""]
+    body += section("Completed", completed, f"No timesheets logged on {prev.strftime('%a %d %b')}.") + [""]
+    body += section("Working on", working, "Nothing in an active stage.") + [""]
+    body += section("Blockers", blocked, "None")
+    print(f"**Standup ready** (completed = timesheets of {prev.strftime('%a %d %b')}). Copy:\n```\n" + "\n".join(body) + "\n```")
+
+
 def cmd_pending(_cfg):
     items = read_state("pending", [])
     print("\n".join(format_proposal(p) if p.get("kind") == "proposal"
@@ -603,6 +779,18 @@ def main(argv):
         cmd_pending(cfg)
     elif cmd == "init":
         cmd_init(cfg)
+    elif cmd == "questions":  # cron: relay new agent questions
+        out = relay_questions(Paperclip(cfg))
+        if out:
+            print("\n\n".join(out))
+    elif cmd == "proposals":  # cron: relay new Odoo change proposals
+        out = relay_proposals()
+        if out:
+            print("\n\n".join(out))
+    elif cmd == "standup":
+        cmd_standup(cfg)
+    elif cmd == "odoo":
+        cmd_odoo(args)
     elif cmd == "propose":
         cmd_propose([a for a in args if a != "--from-chat"], from_chat="--from-chat" in args)
     elif cmd == "answer":

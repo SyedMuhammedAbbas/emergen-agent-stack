@@ -33,6 +33,11 @@ need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found. $2"; }
 # Fill {{KEY}} placeholders from config (and {{name}} partials when a partials dir is given).
 # Usage: render_file <file> [partials_dir]   -> prints the result; fails on unresolved placeholders
 render_file() {
+  # Windows path of the Hermes home (for skills that call the bridge); HERMES_HOME in config.env wins
+  if [ -z "${HERMES_HOME:-}" ] && command -v cmd.exe >/dev/null 2>&1; then
+    local lad; lad=$(cd /mnt/c 2>/dev/null && cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')
+    [ -n "$lad" ] && [ "$lad" != "%LOCALAPPDATA%" ] && export HERMES_HOME="$lad\\hermes"
+  fi
   python3 - "$1" "${2:-}" <<'PY'
 import os, sys, pathlib, re
 text = pathlib.Path(sys.argv[1]).read_text()
@@ -48,7 +53,18 @@ values = {
     "PROJECTS_ROOT": root,
     "PROJECTS_ROOT_WINDOWS": f"{m.group(1).upper()}:\\{m.group(2).replace('/', chr(92))}" if m else root,
     "PROJECT_CATEGORIES": ", ".join(c.strip() for c in os.environ.get("PROJECT_CATEGORIES", "").split(",") if c.strip()),
+    "GIT_AUTHOR": os.environ.get("GIT_AUTHOR", ""),
+    "DAILY_HOURS": os.environ.get("DAILY_HOURS", "8"),
 }
+hh = os.environ.get("HERMES_HOME", "")  # Windows path, e.g. C:\Users\me\AppData\Local\hermes
+hm = re.match(r"^([A-Za-z]):\\(.*)$", hh)
+hh_wsl = f"/mnt/{hm.group(1).lower()}/{hm.group(2).replace(chr(92), '/')}" if hm else ""
+values.update({
+    "HERMES_PY": f"{hh_wsl}/hermes-agent/venv/Scripts/python.exe",
+    "AGENT_OPS": f"{hh}\\scripts\\agent_ops.py",
+    "HERMES_STATE_WSL": f"{hh_wsl}/state/agent_ops",
+    "HERMES_STATE_WIN": f"{hh}\\state\\agent_ops",
+})
 for k, v in values.items():
     text = text.replace("{{" + k + "}}", v)
 left = sorted(set(re.findall(r"\{\{[A-Za-z_-]+\}\}", text)))

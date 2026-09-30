@@ -104,4 +104,28 @@ for key in $(jq -r '.agents[].key' "$ORG"); do
     "$([ ${#missing[@]} -gt 0 ] && echo "  (missing: ${missing[*]})")"
 done
 
+# ---- routines: scheduled issues for agents (e.g. the Timekeeper's end-of-day timesheet proposal) ----
+for key in $(jq -r '.agents[] | select(.routine) | .key' "$ORG"); do
+  r=$(jq -c --arg k "$key" '.agents[] | select(.key==$k) | .routine' "$ORG")
+  cron_var=$(jq -r .cronEnv <<<"$r"); cron="${!cron_var:-}"
+  [ -n "$cron" ] || { warn "routine for $key: $cron_var is empty in config.env, skipped"; continue; }
+  agent_id=$(jq -r --arg k "$key" '.[$k]' <<<"$ids")
+  rid=$(jq -r --arg k "$key" '.routines[$k].id // empty' <<<"$ids")
+  if [ -z "$rid" ]; then
+    rid=$(curl -sf -X POST "$API/companies/$CID/routines" -H 'Content-Type: application/json' -d "$(jq -nc --argjson r "$r" --arg a "$agent_id" \
+      '{title:$r.title, description:$r.description, assigneeAgentId:$a, priority:"medium"}')" | jq -r .id)
+    [ -n "$rid" ] && [ "$rid" != null ] || die "creating routine for $key failed"
+  fi
+  tid=$(jq -r --arg k "$key" '.routines[$k].trigger // empty' <<<"$ids")
+  trig=$(jq -nc --arg c "$cron" --arg tz "${TIMEZONE:-UTC}" '{kind:"schedule", cronExpression:$c, timezone:$tz, enabled:true}')
+  if [ -n "$tid" ] && curl -sf -X PATCH "$API/routine-triggers/$tid" -H 'Content-Type: application/json' -d "$(jq -c 'del(.kind)' <<<"$trig")" >/dev/null; then
+    :
+  else
+    tid=$(curl -sf -X POST "$API/routines/$rid/triggers" -H 'Content-Type: application/json' -d "$trig" | jq -r '.id // .trigger.id')
+    [ -n "$tid" ] && [ "$tid" != null ] || die "creating schedule for routine $key failed"
+  fi
+  ids=$(jq -c --arg k "$key" --arg r "$rid" --arg t "$tid" '.routines[$k] = {id:$r, trigger:$t}' <<<"$ids"); save
+  printf '  routine  %-18s %s (%s)\n' "$(jq -r .title <<<"$r")" "$cron" "${TIMEZONE:-UTC}"
+done
+
 log "org ready. Agent ids: $IDS_FILE"
