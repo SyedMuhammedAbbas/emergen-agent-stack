@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Installs or updates the Emergen agent stack. Safe to re-run; it stops with instructions when a manual step is needed.
+  Installs or updates the agent stack. Safe to re-run; it stops with instructions when a manual step is needed.
 .PARAMETER SkipHermes
   Skip the Hermes bridge (Odoo intake, Discord digest, approvals).
 .PARAMETER OnlyOrg

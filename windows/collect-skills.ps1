@@ -2,13 +2,14 @@
 .SYNOPSIS
   Copies the third-party skills that agents/org.json needs from this machine's Claude / skills installs
   into the SKILLS_SOURCE folder, so wsl/40-org.sh can import them into Paperclip.
-  Emergen's own skills come from skills/ in this repo and are skipped here.
+  This repo's own skills come from skills/ and are skipped here.
 #>
 . "$PSScriptRoot\lib.ps1"
 $cfg = Read-Config
 
 $org = Get-Content (Join-Path $RepoDir 'agents\org.json') -Raw | ConvertFrom-Json
-$wanted = @($org.commonSkills) + @($org.agents | ForEach-Object { $_.skills }) | Sort-Object -Unique
+$wanted = @($org.commonSkills) + @($org.agents | ForEach-Object { $_.skills }) |
+    ForEach-Object { $_.Replace('{{ENGINEERING_SKILL}}', $cfg.ENGINEERING_SKILL) } | Where-Object { $_ } | Sort-Object -Unique
 $own = Get-ChildItem (Join-Path $RepoDir 'skills') -Directory | Select-Object -Expand Name
 $builtin = 'paperclip', 'paperclip-converting-plans-to-tasks'   # shipped with Paperclip
 $wanted = $wanted | Where-Object { $own -notcontains $_ -and $builtin -notcontains $_ }

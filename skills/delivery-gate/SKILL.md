@@ -1,9 +1,9 @@
 ---
-name: emergen-delivery-gate
-description: Validation gate every Emergen task and milestone must pass before it is marked done or shown to a client. Use when finishing a task, reviewing a PR (QA / UX review), or preparing a client milestone delivery.
+name: delivery-gate
+description: Validation gate every task and milestone must pass before it is marked done or shown to a client. Use when finishing a task, reviewing a PR (QA / UX review), or preparing a client milestone delivery.
 ---
 
-# Emergen Delivery Gate
+# Delivery Gate
 
 Nothing incomplete, broken or unfriendly reaches a client. There are two gates.
 
@@ -19,13 +19,13 @@ The implementing engineer self-checks, then QA independently re-checks. A task p
 **Correctness**
 - [ ] Full test suite, lint and type-check pass (paste the commands and summary lines).
 - [ ] New behaviour has tests; bug fixes have a regression test.
-- [ ] `emergen-engineering` checklists `feature-complete.md` and `pre-merge.md` pass.
+- [ ] `{{ENGINEERING_SKILL}}` checklists `feature-complete.md` and `pre-merge.md` pass.
 
 **UX (any user-facing change)**
 - [ ] Walk the real flow in a browser/simulator (Playwright or the dev server). Attach screenshots at mobile (375px) and desktop widths.
 - [ ] Follows `ui-ux-pro-max` and `apple-design`: clear hierarchy, consistent spacing/typography, obvious primary action, feedback on every action, no layout shift, no horizontal scroll on mobile.
 - [ ] `accessibility-review`: keyboard reachable, visible focus, labels on inputs, contrast AA, reduced-motion respected.
-- [ ] Copy follows `ux-copy` and `emergen-no-slop` (no em dashes, no filler, errors say what happened and what to do).
+- [ ] Copy follows `ux-copy` and `no-slop` (no em dashes, no filler, errors say what happened and what to do).
 
 **Security / ops (when touched)**
 - [ ] No secrets in code or logs; input validated server-side; authz checked on every new endpoint.
@@ -48,7 +48,7 @@ Owned by the Manager, checked by QA + UX Reviewer, released only after **board (
 
 - [ ] Every issue in the milestone has QA PASS (and UX PASS if user-facing). No open FAIL, blocker or "in progress" items.
 - [ ] End-to-end smoke test of the milestone's main user journeys on a staging build, with screenshots/recording.
-- [ ] `emergen-engineering` `production-ready.md` and `deploy-checklist` pass for anything being deployed.
-- [ ] Release notes written for the client in plain language: what's new, how to try it, known limitations. Passes `emergen-no-slop`.
+- [ ] `{{ENGINEERING_SKILL}}` `production-ready.md` and `deploy-checklist` pass for anything being deployed.
+- [ ] Release notes written for the client in plain language: what's new, how to try it, known limitations. Passes `no-slop`.
 - [ ] Docs updated (README, env vars, runbook) by the Docs agent.
 - [ ] Open a Paperclip approval request to the board with the milestone summary and links. Do not send, deploy to production, or mark delivered until the board approves.

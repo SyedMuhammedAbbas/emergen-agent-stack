@@ -54,7 +54,7 @@ cd "$env:LOCALAPPDATA\hermes\scripts"
 | What | Where |
 |---|---|
 | Paperclip DB, agents, runs, managed skills | WSL `~/.paperclip/instances/default/` |
-| Paperclip ids used by the scripts | WSL `~/.emergen-agent-stack/ids.json` |
+| Paperclip ids used by the scripts | WSL `~/.agent-stack/ids.json` |
 | jev-router config, keys, log | WSL `~/.config/jev-router/`, `~/.local/state/jev-router/router.log` |
 | Hermes bridge config (ids, employee, project_map) | `%LOCALAPPDATA%\hermes\scripts\agent_ops.config.json` |
 | Digest pending items, relayed questions | `%LOCALAPPDATA%\hermes\state\agent_ops\` |

@@ -15,14 +15,17 @@ foreach ($k in 'ODOO_URL', 'ODOO_DB', 'ODOO_USERNAME', 'ODOO_API_KEY') {
 # ---- scripts + skill ----
 $scripts = Join-Path $hh 'scripts'; New-Item -ItemType Directory -Force $scripts | Out-Null
 Copy-Item "$RepoDir\hermes\agent_ops.py", "$RepoDir\hermes\agent_intake.py", "$RepoDir\hermes\agent_digest.py" $scripts -Force
-$skillDir = Join-Path $hh 'skills\productivity\emergen-agent-ops'; New-Item -ItemType Directory -Force $skillDir | Out-Null
+$skillDir = Join-Path $hh 'skills\productivity\agent-ops'; New-Item -ItemType Directory -Force $skillDir | Out-Null
+# pre-1.0 installs used this name; two copies would give Hermes two competing skills
+$legacySkill = Join-Path $hh 'skills\productivity\emergen-agent-ops\SKILL.md'
+if (Test-Path $legacySkill) { Remove-Item $legacySkill; Remove-Item (Split-Path $legacySkill) -ErrorAction SilentlyContinue }
 $utf8 = New-Object System.Text.UTF8Encoding($false)  # no BOM; PowerShell 5.1's utf8 adds one
-$skill = [IO.File]::ReadAllText("$RepoDir\hermes\emergen-agent-ops\SKILL.md", $utf8)
+$skill = [IO.File]::ReadAllText("$RepoDir\hermes\agent-ops\SKILL.md", $utf8)
 [IO.File]::WriteAllText((Join-Path $skillDir 'SKILL.md'), $skill.Replace('{{HERMES_HOME}}', $hh).Replace('{{TIMESHEET_EMPLOYEE}}', $cfg.TIMESHEET_EMPLOYEE), $utf8)
 Write-Step "bridge scripts and skill installed in $hh"
 
 # ---- config from the Paperclip ids ----
-$idsJson = (& wsl.exe -d $cfg.WSL_DISTRO -u $cfg.WSL_USER -- cat "/home/$($cfg.WSL_USER)/.emergen-agent-stack/ids.json") -join "`n"
+$idsJson = (& wsl.exe -d $cfg.WSL_DISTRO -u $cfg.WSL_USER -- cat "/home/$($cfg.WSL_USER)/.agent-stack/ids.json") -join "`n"
 $ids = $idsJson -replace "`0", '' | ConvertFrom-Json
 if (-not $ids.company -or -not $ids.manager -or -not $ids.estimator) { throw "Paperclip ids missing; run wsl/40-org.sh first." }
 $cfgFile = Join-Path $scripts 'agent_ops.config.json'

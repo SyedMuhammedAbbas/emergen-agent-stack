@@ -1,4 +1,4 @@
-"""Emergen agent ops: Odoo <-> Paperclip bridge for Hermes.
+"""Agent ops: Odoo <-> Paperclip bridge for Hermes.
 
 Subcommands
   init                        Check Odoo/Paperclip access and create the Odoo tags if missing
@@ -251,7 +251,7 @@ def cmd_newproject(cfg, args, dry_run):
     body = {
         "title": f"New project: {name}",
         "description": "## Client requirements (verbatim)\n\n" + text.strip()
-                       + "\n\n---\nEstimator: follow `emergen-project-estimation`. Ask the board Emergen vs Personal first.",
+                       + "\n\n---\nEstimator: follow `project-estimation`. Ask the board which project category first.",
         "status": "todo",
         "priority": "high",
         "assigneeAgentId": cfg["estimator_agent_id"],
@@ -261,7 +261,7 @@ def cmd_newproject(cfg, args, dry_run):
         return
     issue = Paperclip(cfg).create_issue(body)
     print(f"Created {issue.get('identifier')} 'New project: {name}' for the Estimator. "
-          "It will ask here whether this is an Emergen or Personal project.")
+          "It will ask here which project category this is.")
 
 
 # ---------- digest ----------
@@ -327,7 +327,7 @@ def cmd_digest(cfg):
     if not items:
         print("**Agent digest**: no agent work to approve today.")
         return
-    date = now.astimezone(dt.timezone(dt.timedelta(hours=5))).strftime("%a %d %b")
+    date = now.astimezone().strftime("%a %d %b")  # local time
     out = [f"**Agent digest, {date}** ({len(items)} item{'s' if len(items) != 1 else ''})"]
     for it in items:
         changed = "; ".join(it["changed"][-3:])[:300] or "-"

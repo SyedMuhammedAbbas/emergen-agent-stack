@@ -1,21 +1,21 @@
 ---
-name: emergen-agent-ops
+name: agent-ops
 description: "Handle approve/edit/reject replies to the daily AI-agent digest (Paperclip -> Odoo timesheets)."
 version: 0.1.0
-author: Emergen
+author: agent-stack
 platforms: [windows]
 metadata:
   hermes:
     tags: [Odoo, Paperclip, Timesheets, Approvals, Agents]
 ---
 
-# Emergen agent ops
+# Agent ops bridge
 
 The AI engineering agents (Manager, CTO, Frontend/Backend/DevOps/SecOps Engineers, QA, UX Reviewer, Docs, Estimator) run in Paperclip (http://localhost:3100).
 Two scheduled jobs feed this workflow:
 
 - **agent-intake** (every 15 min): Odoo tasks tagged `agent-ready` become Paperclip issues `[ODOO-<id>] <name>` assigned to the Manager; the Odoo task gets the `agent-synced` tag.
-- **agent-digest** (18:45 PKT, Mon-Sat): posts a numbered list of agent work awaiting approval to the approvals channel.
+- **agent-digest** (daily, `DIGEST_SCHEDULE` in config.env): posts a numbered list of agent work awaiting approval to the approvals channel.
 - The intake job also relays any agent comment starting with "Question for board" as a ❓ message.
 
 All Odoo writes go through one script. Never write timesheets, stages or chatter for agent work by hand.
@@ -34,7 +34,7 @@ The user replies to an **Agent digest** message (or mentions digest item numbers
 | `edit 2 hours=1.5` / `edit 2 stage=Testing` | `edit 2 hours=1.5 stage=Testing` (stage names with spaces: use `_`, e.g. `stage=Code_Review`) |
 | `reject 4 <reason>` | `reject 4 <reason>` |
 | "what's pending?" | `pending` |
-| `answer EME-12 emergen, folder acme-portal` (reply to a relayed ❓ question) | `answer EME-12 emergen, folder acme-portal` |
+| `answer EME-12 clients, folder acme-portal` (reply to a relayed ❓ question) | `answer EME-12 clients, folder acme-portal` |
 | `new project: <name>` followed by the client's requirements (text and/or attached files) | Save the full requirements text (message text plus the extracted text of any attached .txt/.md/.pdf/.docx) to `{{HERMES_HOME}}\state\agent_ops\requirements-<name>.md`, then run `newproject <name> --file <that path>` |
 
 For `new project`, keep the client's wording verbatim; do not summarise, reorder or "improve" it. If an attachment can't be read, say which one and still create the project with what you have.

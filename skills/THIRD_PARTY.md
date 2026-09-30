@@ -15,4 +15,4 @@ The agents use these skills, but they are **not committed** here: they belong to
 | ui-ux-pro-max | Frontend, UX Reviewer | installed in `~/.claude/skills`; source not recorded on this machine |
 | paperclip, paperclip-converting-plans-to-tasks | all / Manager | ship with Paperclip, nothing to install |
 
-Emergen's own skills (`emergen-engineering`, `emergen-no-slop`, `emergen-delivery-gate`, `emergen-project-estimation`) live in this folder and always take precedence over a same-named folder in `SKILLS_SOURCE`.
+This repo's own skills (`no-slop`, `delivery-gate`, `project-estimation`, and the engineering-standards skill named by `ENGINEERING_SKILL`) live in this folder and always take precedence over a same-named folder in `SKILLS_SOURCE`.

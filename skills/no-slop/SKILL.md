@@ -1,9 +1,9 @@
 ---
-name: emergen-no-slop
-description: Anti-hallucination and anti-AI-slop rules for all code, comments, commit messages, PR descriptions, docs and client-facing text at Emergen. Use on every task that writes anything a human will read.
+name: no-slop
+description: Anti-hallucination and anti-AI-slop rules for all code, comments, commit messages, PR descriptions, docs and client-facing text. Use on every task that writes anything a human will read.
 ---
 
-# Emergen No-Slop Standard
+# No-Slop Standard
 
 Everything you write must read like it came from a careful senior engineer, not a chatbot. These rules apply to code, comments, docs, commit messages, PR descriptions, issue comments and client deliverables.
 

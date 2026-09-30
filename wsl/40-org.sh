@@ -6,12 +6,12 @@ load_config
 load_node
 need paperclipai "Run 20-tools.sh first."
 API=http://127.0.0.1:3100/api
-ORG="$REPO_DIR/agents/org.json"
 CLAUDE="$HOME/.local/bin/claude"
 mkdir -p "$STATE_DIR"
-
-# migrate state from the first manual install
-[ -f "$IDS_FILE" ] || { [ -f "$HOME/agent-stack/agents/ids.json" ] && cp "$HOME/agent-stack/agents/ids.json" "$IDS_FILE"; } || true
+[ -n "${COMPANY_NAME:-}" ] || die "config.env: COMPANY_NAME is empty"
+# org.json with {{ENGINEERING_SKILL}} etc. filled in
+ORG="$STATE_DIR/org.rendered.json"
+render_file "$REPO_DIR/agents/org.json" > "$ORG"
 [ -f "$IDS_FILE" ] || echo '{}' > "$IDS_FILE"
 ids=$(cat "$IDS_FILE")
 save() { echo "$ids" | jq . > "$IDS_FILE"; }
@@ -33,9 +33,13 @@ imported=0
 for src in "$REPO_DIR"/skills/*/ "${SKILLS_SOURCE:-/nonexistent}"/*/; do
   [ -f "$src/SKILL.md" ] || continue
   name=$(basename "$src")
-  # repo copy wins over the third-party folder for Emergen skills
+  # this repo's skills win over a same-named third-party folder
   if [ -d "$REPO_DIR/skills/$name" ] && [ "${src%/}" != "$REPO_DIR/skills/$name" ]; then continue; fi
   rm -rf "${MANAGED:?}/$name"; cp -r "$src" "$MANAGED/$name"
+  # repo skills may use config placeholders ({{PROJECTS_ROOT}}, {{STACK}}, ...)
+  if [ "${src%/}" = "$REPO_DIR/skills/$name" ]; then
+    render_file "$src/SKILL.md" > "$MANAGED/$name/SKILL.md" || die "rendering skill $name failed"
+  fi
   paperclipai skills import "$MANAGED/$name" -C "$CID" --json >/dev/null && imported=$((imported+1)) || warn "skill import failed: $name"
 done
 log "skills imported/refreshed: $imported"
@@ -48,16 +52,7 @@ while read -r key slug; do
 done < <(paperclipai skills list -C "$CID" | sed -n 's/.* key=\([^ ]*\) slug=\([^ ]*\) .*/\1 \2/p')
 
 # ---- agents ----
-render() { # key -> instructions markdown
-  python3 - "$REPO_DIR/agents" "$1" <<'PY'
-import sys, pathlib
-d = pathlib.Path(sys.argv[1]); t = (d / f"{sys.argv[2]}.md").read_text()
-for p in (d / "_partials").glob("*.md"):
-    t = t.replace("{{" + p.stem + "}}", p.read_text().strip())
-if "{{" in t: sys.exit(f"unresolved placeholder in {sys.argv[2]}.md")
-print(t.rstrip())
-PY
-}
+render() { render_file "$REPO_DIR/agents/$1.md" "$REPO_DIR/agents/_partials"; }
 
 existing_agents=$(curl -sf "$API/companies/$CID/agents")
 router_env=$(jq -c .routerEnv "$ORG")
