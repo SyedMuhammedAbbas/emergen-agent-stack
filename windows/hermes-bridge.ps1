@@ -37,7 +37,6 @@ $json = [ordered]@{
     manager_agent_id   = $ids.manager
     estimator_agent_id = $ids.estimator
     ready_tag          = $cfg.ODOO_READY_TAG
-    synced_tag         = $cfg.ODOO_SYNCED_TAG
     timesheet_employee = $cfg.TIMESHEET_EMPLOYEE
     project_map        = $projectMap
 } | ConvertTo-Json
@@ -46,6 +45,15 @@ Write-Step "wrote $cfgFile (project_map preserved)"
 
 Push-Location $scripts
 try { & $py agent_ops.py init; if ($LASTEXITCODE) { throw "agent_ops.py init failed" } } finally { Pop-Location }
+
+# ---- Hermes may read Odoo but never write it: every write goes through an approved proposal ----
+$odooWriteTools = '["bulk_operation","execute_action","execute_method","save_doc","save_sop"]'
+if ((hermes config get mcp_servers.odoo 2>&1) -match 'odoo-mcp') {
+    hermes config set mcp_servers.odoo.tools.exclude $odooWriteTools | Out-Null
+    Write-Step "Hermes odoo MCP write tools disabled (restart the gateway to apply: Stop the hermes gateway process, Start-ScheduledTask Hermes_Gateway)"
+} else {
+    Write-Warn "no 'odoo' MCP server in Hermes config; if Hermes reaches Odoo another way, make that read-only yourself"
+}
 
 # ---- cron jobs (created once; delete in Hermes to recreate with new schedules) ----
 $list = (hermes cron list 2>&1) -join "`n"

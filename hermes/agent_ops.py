@@ -1,8 +1,9 @@
 """Agent ops: Odoo <-> Paperclip bridge for Hermes.
 
 Subcommands
-  init                        Check Odoo/Paperclip access and create the Odoo tags if missing
-  intake                     Odoo tasks tagged agent-ready -> Paperclip issues (assigned to Manager)
+  init                        Check Odoo/Paperclip access (read-only); queues a proposal if the intake tag is missing
+  propose --file p.json       Queue any other Odoo change (tasks, timesheets, stages, notes) for approval in Discord
+  intake                    Odoo tasks tagged agent-ready -> Paperclip issues (assigned to Manager)
   digest                      Build the daily approval digest from agents' "Run summary" comments
   approve 1,3                 Write timesheets / stage / chatter to Odoo for digest items
   edit 2 hours=1.5 [stage=X]  Adjust an item, then approve it
@@ -12,7 +13,7 @@ Subcommands
   newproject <name> --file f  New client requirements -> Estimator (or pipe text on stdin)
 
 Add --dry-run to approve/edit/reject to print what would happen without writing.
-Nothing is written to Odoo except by approve/edit.
+Nothing is written to Odoo except by approve/edit of an item you approved in Discord.
 """
 from __future__ import annotations
 
@@ -37,7 +38,6 @@ DEFAULT_CONFIG = {
     "manager_agent_id": "",
     "estimator_agent_id": "",
     "ready_tag": "agent-ready",
-    "synced_tag": "agent-synced",
     "timesheet_employee": "",
     # Odoo project name -> Paperclip project id (fill in once repos are attached)
     "project_map": {},
@@ -151,16 +151,18 @@ def html_to_text(s) -> str:
 # ---------- intake ----------
 
 def cmd_intake(cfg):
+    """Read-only on Odoo: tagged tasks become Paperclip issues. Nothing is written to Odoo here."""
     odoo, pc = Odoo(), Paperclip(cfg)
-    ready, synced = odoo.tag_id(cfg["ready_tag"]), odoo.tag_id(cfg["synced_tag"])
-    if not ready or not synced:
-        raise SystemExit("Odoo tags agent-ready / agent-synced not found")
-    tasks = odoo.call("project.task", "search_read",
-                      [["tag_ids", "in", [ready]], ["tag_ids", "not in", [synced]]],
-                      fields=["id", "name", "description", "project_id", "stage_id", "date_deadline", "priority"],
-                      limit=20)
-    existing = {i.get("billingCode") for i in pc.issues()}
+    ready = odoo.tag_id(cfg["ready_tag"])
     lines = []
+    if not ready:
+        lines.append(f"Odoo tag `{cfg['ready_tag']}` does not exist yet; approve the setup proposal from `init`.")
+        tasks = []
+    else:
+        tasks = odoo.call("project.task", "search_read", [["tag_ids", "in", [ready]]],
+                          fields=["id", "name", "description", "project_id", "stage_id", "date_deadline", "priority"],
+                          limit=50)
+    existing = {i.get("billingCode") for i in pc.issues()}  # dedupe on the Paperclip side
     for t in tasks:
         code = f"ODOO-{t['id']}"
         project = t["project_id"][1] if t["project_id"] else "(no project)"
@@ -185,15 +187,9 @@ def cmd_intake(cfg):
             if project in cfg["project_map"]:
                 body["projectId"] = cfg["project_map"][project]
             issue = pc.create_issue(body)
-            ident = issue.get("identifier") or issue.get("id")
-        else:
-            ident = "already in Paperclip"
-        odoo.call("project.task", "write", [t["id"]], {"tag_ids": [(4, synced)]})
-        odoo.call("project.task", "message_post", [t["id"]],
-                  body=f"Handed to the AI engineering agents (Paperclip {ident}).",
-                  message_type="comment", subtype_xmlid="mail.mt_note")
-        lines.append(f"• {code} {t['name']} → Paperclip {ident}")
+            lines.append(f"• {code} {t['name']} → Paperclip {issue.get('identifier') or issue.get('id')}")
     lines += relay_questions(pc)
+    lines += relay_proposals()
     if lines:  # empty stdout = silent run
         print("**Agent intake**\n" + "\n".join(lines))
 
@@ -321,6 +317,8 @@ def cmd_digest(cfg):
     items = list(pending.values())
     for n, it in enumerate(items, 1):
         it["n"] = n
+        if it.get("kind") == "proposal":
+            it["posted"] = True
     write_state("pending", items)
     write_state("last_digest", {"at": now.isoformat()})
 
@@ -330,6 +328,9 @@ def cmd_digest(cfg):
     date = now.astimezone().strftime("%a %d %b")  # local time
     out = [f"**Agent digest, {date}** ({len(items)} item{'s' if len(items) != 1 else ''})"]
     for it in items:
+        if it.get("kind") == "proposal":  # renumbered above, so always re-show it
+            out.append("\n" + format_proposal(it))
+            continue
         changed = "; ".join(it["changed"][-3:])[:300] or "-"
         out.append(
             f"\n**{it['n']}. {it['title']}** ({it['identifier']}, status {it.get('status')})\n"
@@ -367,7 +368,10 @@ def approve(cfg, items, dry_run=False):
     emp = find_employee(odoo, cfg["timesheet_employee"])
     today = dt.date.today().isoformat()
     done, lines = set(), []
-    for it in items:
+    for it in [i for i in items if i.get("kind") == "proposal"]:
+        lines.append(execute_proposal(odoo, emp, it, dry_run))
+        done.add(it["issue_id"])
+    for it in [i for i in items if i.get("kind") != "proposal"]:
         task = odoo.call("project.task", "read", [it["odoo_task_id"]], fields=["project_id", "stage_id", "name"])[0]
         project_id = task["project_id"][0] if task["project_id"] else None
         actions = []
@@ -400,8 +404,134 @@ def approve(cfg, items, dry_run=False):
     print(("(dry run) " if dry_run else "") + "\n".join(lines))
 
 
+# ---------- proposals: any other Odoo change, queued until approved in Discord ----------
+#
+# Proposal file (JSON):
+# {"title": "Timesheets 28-29 Sep", "actions": [
+#   {"type": "create_task", "ref": "t1", "project": "NeuraX", "name": "...", "stage": "Code Review", "description": "..."},
+#   {"type": "timesheet", "date": "2026-09-28", "task": 28034 | "t1", "hours": 2.5, "description": "..."},
+#   {"type": "stage", "task": 28034, "stage": "Testing"},
+#   {"type": "note", "task": 28034, "body": "..."},
+#   {"type": "create_tag", "name": "agent-ready"}]}
+# "task" may be an Odoo task id or the "ref" of a create_task earlier in the same proposal.
+
+ACTION_TYPES = {"create_task", "timesheet", "stage", "note", "create_tag"}
+
+
+def describe_action(a: dict) -> str:
+    t = a["type"]
+    if t == "create_task":
+        return f"new task in {a['project']} ({a.get('stage') or 'default stage'}): {a['name']}"
+    if t == "timesheet":
+        return f"{a['date']}  {a['hours']}h on {'task ' + str(a['task']) if isinstance(a['task'], int) else 'new task ' + a['task']}: {a.get('description', '')}"
+    if t == "stage":
+        return f"task {a['task']} stage → {a['stage']}"
+    if t == "note":
+        return f"note on task {a['task']}: {a['body'][:120]}"
+    return f"create Odoo tag {a['name']}"
+
+
+def cmd_propose(args, from_chat=False):
+    if "--file" not in args:
+        raise SystemExit("Usage: propose --file <proposal.json> [--from-chat]")
+    spec = json.loads(Path(args[args.index("--file") + 1]).read_text(encoding="utf-8-sig"))
+    actions = spec.get("actions") or []
+    bad = [a for a in actions if a.get("type") not in ACTION_TYPES]
+    if not actions or bad:
+        raise SystemExit(f"Proposal needs actions of types {sorted(ACTION_TYPES)}; bad: {bad[:2]}")
+    refs = {a["ref"] for a in actions if a["type"] == "create_task" and a.get("ref")}
+    for a in actions:
+        if isinstance(a.get("task"), str) and a["task"] not in refs:
+            raise SystemExit(f"unknown task ref {a['task']!r}")
+    pending = read_state("pending", [])
+    n = max([p.get("n", 0) for p in pending] + [0]) + 1
+    item = {"kind": "proposal", "issue_id": f"proposal-{dt.datetime.now().strftime('%Y%m%d%H%M%S%f')}", "n": n,
+            "title": spec.get("title") or "Odoo changes", "actions": actions, "posted": from_chat,
+            "hours": sum(float(a.get("hours", 0)) for a in actions if a["type"] == "timesheet"), "stage": None}
+    write_state("pending", pending + [item])
+    print(format_proposal(item))
+
+
+def format_proposal(it: dict) -> str:
+    lines = [f"📝 **{it['n']}. Proposed Odoo changes: {it['title']}** ({len(it['actions'])} change{'s' if len(it['actions']) != 1 else ''}"
+             + (f", {it['hours']}h" if it["hours"] else "") + ")"]
+    lines += [f"   • {describe_action(a)}" for a in it["actions"][:25]]
+    if len(it["actions"]) > 25:
+        lines.append(f"   • ... and {len(it['actions']) - 25} more")
+    lines.append(f"Reply `approve {it['n']}` to write these to Odoo, or `reject {it['n']}`.")
+    return "\n".join(lines)
+
+
+def relay_proposals() -> list[str]:
+    pending = read_state("pending", [])
+    out = [format_proposal(p) for p in pending if p.get("kind") == "proposal" and not p.get("posted")]
+    if out:
+        for p in pending:
+            if p.get("kind") == "proposal":
+                p["posted"] = True
+        write_state("pending", pending)
+    return out
+
+
+def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
+    created, done = {}, []
+    project_ids = {}
+
+    def project_id(name):
+        if name not in project_ids:
+            ids = odoo.call("project.project", "search", [["name", "=", name]], limit=2)
+            if len(ids) != 1:
+                raise SystemExit(f"Odoo project '{name}' not found exactly once")
+            project_ids[name] = ids[0]
+        return project_ids[name]
+
+    def task_id(ref):
+        return created.get(ref, ref) if isinstance(ref, str) else ref
+
+    for a in it["actions"]:
+        t = a["type"]
+        if t == "create_tag":
+            if not dry_run and not odoo.tag_id(a["name"]):
+                odoo.call("project.tags", "create", {"name": a["name"]})
+        elif t == "create_task":
+            pid = project_id(a["project"])
+            vals = {"name": a["name"], "project_id": pid, "user_ids": [(6, 0, [odoo.uid])]}
+            if a.get("description"):
+                vals["description"] = a["description"]
+            if a.get("stage"):
+                sid = odoo.call("project.task.type", "search", [["name", "=", a["stage"]], ["project_ids", "in", [pid]]], limit=1)
+                if sid:
+                    vals["stage_id"] = sid[0]
+            created[a.get("ref") or a["name"]] = 0 if dry_run else odoo.call("project.task", "create", vals)
+        elif t == "timesheet":
+            tid = task_id(a["task"])
+            if not dry_run:
+                task = odoo.call("project.task", "read", [tid], fields=["project_id"])[0]
+                odoo.call("account.analytic.line", "create", {
+                    "date": a["date"], "employee_id": emp, "project_id": task["project_id"][0], "task_id": tid,
+                    "unit_amount": float(a["hours"]), "name": a.get("description") or "/"})
+        elif t == "stage":
+            tid = task_id(a["task"])
+            if not dry_run:
+                pid = odoo.call("project.task", "read", [tid], fields=["project_id"])[0]["project_id"][0]
+                sid = odoo.call("project.task.type", "search", [["name", "ilike", a["stage"]], ["project_ids", "in", [pid]]], limit=1)
+                if not sid:
+                    raise SystemExit(f"stage '{a['stage']}' not found for task {tid}")
+                odoo.call("project.task", "write", [tid], {"stage_id": sid[0]})
+        elif t == "note":
+            if not dry_run:
+                odoo.call("project.task", "message_post", [task_id(a["task"])], body=a["body"],
+                          message_type="comment", subtype_xmlid="mail.mt_note")
+        done.append(t)
+    new = ", ".join(f"#{v}" for v in created.values() if v)
+    return (f"✅ {it['n']}. {it['title']}: {len(done)} changes written" + (f" (new tasks {new})" if new else "")
+            if not dry_run else f"{it['n']}. {it['title']}: {len(done)} changes would be written")
+
+
 def cmd_edit(cfg, args, dry_run):
     items = select(args[0])
+    if any(i.get("kind") == "proposal" for i in items):
+        raise SystemExit("Proposals can't be edited; reject it and ask for a corrected one.")
     for kv in args[1:]:
         k, _, v = kv.partition("=")
         for it in items:
@@ -416,6 +546,9 @@ def cmd_reject(cfg, args, dry_run):
     pc, items = Paperclip(cfg), select(args[0])
     reason = " ".join(args[1:]) or "Rejected in the daily digest."
     for it in items:
+        if it.get("kind") == "proposal":
+            print(f"{'(dry run) ' if dry_run else ''}❌ {it['n']}. proposal '{it['title']}' discarded, nothing written")
+            continue
         if not dry_run:
             pc.comment(it["issue_id"], f"**Board rejected this in the daily digest:** {reason}")
             pc.update_issue(it["issue_id"], {"status": "todo", "assigneeAgentId": cfg["manager_agent_id"]})
@@ -425,20 +558,25 @@ def cmd_reject(cfg, args, dry_run):
 
 
 def cmd_init(cfg):
-    """Check Odoo + Paperclip access, create the Odoo tags if missing, resolve the timesheet employee."""
+    """Check Odoo + Paperclip access (read-only). A missing tag is queued as a proposal, never created here."""
     odoo, pc = Odoo(), Paperclip(cfg)
-    for tag in (cfg["ready_tag"], cfg["synced_tag"]):
-        if not odoo.tag_id(tag):
-            odoo.call("project.tags", "create", {"name": tag})
-            print(f"created Odoo tag {tag}")
     emp = find_employee(odoo, cfg["timesheet_employee"])
     pc.issues()
     print(f"ok: Odoo uid {odoo.uid}, employee '{cfg['timesheet_employee']}' id {emp}, Paperclip reachable")
+    if not odoo.tag_id(cfg["ready_tag"]):
+        queued = any(p.get("kind") == "proposal" and p["title"] == "Setup: intake tag" for p in read_state("pending", []))
+        if not queued:
+            f = STATE_DIR / "setup-tag.json"
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps({"title": "Setup: intake tag", "actions": [{"type": "create_tag", "name": cfg["ready_tag"]}]}))
+            cmd_propose(["--file", str(f)])
+        print(f"Odoo tag {cfg['ready_tag']} is missing; approve the proposal in Discord to create it.")
 
 
 def cmd_pending(_cfg):
     items = read_state("pending", [])
-    print("\n".join(f"{p['n']}. {p['title']}: {p['hours']}h, stage → {p['stage'] or 'unchanged'}"
+    print("\n".join(format_proposal(p) if p.get("kind") == "proposal"
+                    else f"{p['n']}. {p['title']}: {p['hours']}h, stage → {p['stage'] or 'unchanged'}"
                     for p in items) or "No pending items.")
 
 
@@ -465,6 +603,8 @@ def main(argv):
         cmd_pending(cfg)
     elif cmd == "init":
         cmd_init(cfg)
+    elif cmd == "propose":
+        cmd_propose([a for a in args if a != "--from-chat"], from_chat="--from-chat" in args)
     elif cmd == "answer":
         cmd_answer(cfg, args, dry)
     elif cmd == "newproject":

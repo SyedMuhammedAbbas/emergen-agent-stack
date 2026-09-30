@@ -24,6 +24,8 @@ Run summary comment on every run (ticket id, PR, verdict, hours, proposed stage)
 Daily digest (bridge) -> you approve / edit / reject -> timesheets + stage + note in Odoo
 ```
 
+**Nothing is written to Odoo without your approval in Discord.** Intake only reads Odoo. Every Odoo change (timesheets, new tickets, stage moves, notes) is posted to Discord first, as a digest item or a numbered 📝 proposal, and written only after you reply `approve N`. `windows/hermes-bridge.ps1` also disables the write tools of Hermes's `odoo` MCP server, so Hermes itself can only read Odoo.
+
 Agents never merge, push to the main branch, or deploy to production. Questions they can't answer alone are posted as `**Question for board:**` and relayed to you. A milestone is never sent to a client without passing Gate 2 of `skills/delivery-gate` and your approval in Paperclip.
 
 ## What runs where
@@ -121,8 +123,22 @@ Then give the agents work in any of these ways:
 | Answer an agent's question | Discord `answer EME-12 <reply>` (bridge) or reply on the issue |
 | Review and merge | Agents open PRs; you review and merge on GitHub |
 | Approve the day's work | Discord `approve 1,3`, `edit 2 hours=1.5 stage=Testing`, `reject 4 <reason>`, `pending` (bridge) |
+| Change something in Odoo | Ask Hermes in Discord ("log 3h on task 28034 for yesterday", "create a ticket for X and log 2h"). It replies with a 📝 proposal; `approve N` writes it |
 | Start a brand-new client project | Discord `new project: <name>` with the requirements (bridge), or a Paperclip issue titled `New project: <name>` assigned to the Estimator. It asks which category, then writes `<PROJECTS_ROOT>/<category>/<name>/` with the requirements and an estimation `.xlsx` |
 | Watch agents work | Paperclip issue page (live transcript), agent page (runs, cost), http://127.0.0.1:4100 (router decisions) |
+
+## Hermes as an agent in Paperclip (optional)
+
+Besides the bridge, Hermes can join the org as **Ops (Hermes)**, so the Manager can assign it Odoo lookups, Odoo change proposals and Discord announcements. Run it yourself (it generates a local API key and never prints it):
+
+```powershell
+.\windows\connect-hermes.ps1
+```
+
+1. The first run switches WSL to mirrored networking so Paperclip (in WSL) can reach Hermes on `127.0.0.1:8642`, and exits. Run `wsl --shutdown` (this restarts the agents and Docker Desktop), wait a minute, run it again.
+2. The second run enables Hermes's API server on loopback only, restarts the gateway, and creates the agent reporting to the Manager.
+
+Ops (Hermes) follows the same rule: it only proposes Odoo changes; you approve them in Discord.
 
 ## Skills
 
@@ -167,7 +183,8 @@ wsl/50-connect-project.sh   clone repos, Paperclip project, workspaces, worktree
 windows/wsl-host.ps1        .wslconfig + WSL keepalive task
 windows/hermes-bridge.ps1   bridge scripts, Hermes skill, config, Odoo tags, cron jobs, gateway watchdog
 windows/collect-skills.ps1  gathers third-party skills into SKILLS_SOURCE
-hermes/agent_ops.py         Odoo <-> Paperclip bridge (intake, digest, approve/edit/reject, answer, newproject)
+windows/connect-hermes.ps1  optional: Hermes as the "Ops (Hermes)" Paperclip agent
+hermes/agent_ops.py         Odoo <-> Paperclip bridge (intake, digest, propose, approve/edit/reject, answer, newproject)
 docs/operations.md          health checks, troubleshooting, backups
 ```
 
