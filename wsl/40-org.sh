@@ -56,7 +56,8 @@ render() { render_file "$REPO_DIR/agents/$1.md" "$REPO_DIR/agents/_partials"; }
 
 existing_agents=$(curl -sf "$API/companies/$CID/agents")
 router_env=$(jq -c .routerEnv "$ORG")
-common_skills=$(jq -r '.commonSkills[]' "$ORG")
+# EXTRA_SKILLS (config.env, comma-separated): your own skills every agent gets, e.g. project context skills
+common_skills="$(jq -r '.commonSkills[]' "$ORG") $(tr ',' ' ' <<<"${EXTRA_SKILLS:-}")"
 
 for key in $(jq -r '.agents[].key' "$ORG"); do
   a=$(jq -c --arg k "$key" '.agents[] | select(.key==$k)' "$ORG")
