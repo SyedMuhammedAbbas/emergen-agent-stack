@@ -93,6 +93,10 @@ for key in $(jq -r '.agents[].key' "$ORG"); do
   if [ "$(jq -r '.heartbeat // false' <<<"$a")" = true ] && [ "${MANAGER_HEARTBEAT_SEC:-0}" -gt 0 ]; then
     paperclipai agent update "$id" --json --payload-json \
       "{\"runtimeConfig\":{\"heartbeat\":{\"enabled\":true,\"intervalSec\":$MANAGER_HEARTBEAT_SEC,\"maxConcurrentRuns\":1}}}" >/dev/null
+  elif [ "$(jq -r '.maxConcurrentRuns // empty' <<<"$a")" != "" ]; then
+    # cap parallel runs (e.g. reviewers sharing one test device)
+    paperclipai agent update "$id" --json --payload-json \
+      "{\"runtimeConfig\":{\"heartbeat\":{\"enabled\":false,\"maxConcurrentRuns\":$(jq -r .maxConcurrentRuns <<<"$a")}}}" >/dev/null
   fi
 
   args=(); missing=()

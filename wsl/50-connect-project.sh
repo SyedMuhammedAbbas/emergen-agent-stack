@@ -57,6 +57,8 @@ for path in "${locals[@]}"; do
   git -C "$path" rev-parse --git-dir >/dev/null 2>&1 || die "$path is not a git repository"
   # a Windows checkout seen from WSL: stop git flagging every file as changed on mode/line endings
   git -C "$path" config core.fileMode false
+  # worktrees you made on Windows look "prunable" from WSL; never let a WSL-side gc drop them
+  git -C "$path" config gc.worktreePruneExpire never
   log "using local checkout $path"
   git -C "$path" fetch --all --prune -q || warn "fetch failed for $path (offline?)"
   url=$(git -C "$path" remote get-url origin 2>/dev/null || echo "file://$path")
@@ -70,6 +72,9 @@ for path in "${locals[@]}"; do
 done
 
 # ---- Paperclip project ----
+# Per-issue worktrees are an instance-level (experimental) switch; without it every run shares the checkout itself
+curl -sf -X PATCH "$API/instance/settings/experimental" -H 'Content-Type: application/json' \
+  -d '{"enableIsolatedWorkspaces":true}' >/dev/null || warn "could not enable isolated workspaces"
 pid=$(jq -r --arg n "$name" '.projects[$n].id // empty' "$IDS_FILE")
 [ -n "$pid" ] || pid=$(curl -sf "$API/companies/$CID/projects" | jq -r --arg n "$name" '.[] | select(.name==$n) | .id' | head -1)
 # worktrees always live on the Linux filesystem, even for a /mnt/d checkout: faster, and your folder stays clean
@@ -77,8 +82,10 @@ policy=$(jq -nc --arg ref "${refs[0]}" --arg wt "$dir/.worktrees" '{enabled:true
   workspaceStrategy:{type:"git_worktree", baseRef:$ref, worktreeParentDir:$wt}}')
 if [ -z "$pid" ]; then
   log "creating Paperclip project $name"
+  desc="Repos (agents make their own worktree for any repo other than the primary one, never working in these paths directly):"
+  for i in "${!paths[@]}"; do desc+=$'\n'"- ${paths[$i]} (base ${refs[$i]})"; done
   pid=$(curl -sf -X POST "$API/companies/$CID/projects" -H 'Content-Type: application/json' -d "$(jq -nc \
-    --arg n "$name" --arg m "$MGR" --argjson p "$policy" --arg d "Repos: ${urls[*]}" \
+    --arg n "$name" --arg m "$MGR" --argjson p "$policy" --arg d "$desc" \
     '{name:$n, description:$d, status:"in_progress", leadAgentId:$m, executionWorkspacePolicy:$p}')" | jq -r .id)
   [ -n "$pid" ] && [ "$pid" != null ] || die "project creation failed"
 else
@@ -86,9 +93,12 @@ else
     -d "$(jq -nc --argjson p "$policy" '{executionWorkspacePolicy:$p}')" >/dev/null || warn "could not update workspace policy"
 fi
 
-# ---- one workspace per repo (first repo is primary) ----
+# ---- the first repo is the project's only Paperclip workspace ----
+# With several workspaces Paperclip prepares a managed copy of every secondary repo inside the primary checkout
+# before each run (slow on /mnt/d, and it writes into your repo). Secondary repos are listed in the project
+# description and in ids.json; agents create their own worktree for them.
 existing=$(curl -sf "$API/projects/$pid/workspaces" || echo '[]')
-for i in "${!paths[@]}"; do
+for i in 0; do
   wname=$(basename "${paths[$i]}")
   if jq -e --arg c "${paths[$i]}" '(if type=="array" then . else (.workspaces // .items // []) end) | any(.cwd==$c)' <<<"$existing" >/dev/null; then
     log "workspace $wname already attached"; continue

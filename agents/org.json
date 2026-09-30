@@ -44,12 +44,14 @@
     {
       "key": "qa", "name": "QA", "role": "qa", "title": "QA Engineer", "icon": "search",
       "model": "claude-sonnet-5", "router": false, "reportsTo": "manager", "budgetCents": 3000,
+      "maxConcurrentRuns": 2,
       "skills": ["{{ENGINEERING_SKILL}}", "delivery-gate", "testing-strategy", "code-review",
                  "accessibility-review", "systematic-debugging"]
     },
     {
       "key": "ux", "name": "UX Reviewer", "role": "designer", "title": "UX Reviewer", "icon": "eye",
       "model": "claude-sonnet-5", "router": false, "reportsTo": "manager", "budgetCents": 2000,
+      "maxConcurrentRuns": 2,
       "skills": ["delivery-gate", "ui-ux-pro-max", "apple-design", "design-critique", "accessibility-review", "ux-copy"]
     },
     {
