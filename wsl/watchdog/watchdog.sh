@@ -73,6 +73,33 @@ restart() { # issue-json reason
     jq --arg id "$id" --arg e "$eid" '.[$id] = ((.[$id] // {fixes:[]}) + {escalated:$e})' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
     return 0
   fi
+  # A task whose last run crashed can be held by Paperclip ("execution_reconciliation_required":
+  # stale environment lease or unreconciled failed run). Comments never wake it; a fresh copy does.
+  local wake reason
+  wake=$(curl -s -m 60 -X POST "$API/agents/$(jq -r .assigneeAgentId <<<"$i")/wakeup" -H 'content-type: application/json' \
+    -d "$(jq -nc --arg id "$id" '{source:"assignment", triggerDetail:"system", reason:"issue_assigned", payload:{issueId:$id, taskId:$id, taskKey:$id}}')")
+  reason=$(jq -r '.reason // empty' <<<"$wake" 2>/dev/null)
+  if [ "$reason" = execution_reconciliation_required ]; then
+    if jq -e --arg id "$id" 'any(.[]; .parentId == $id and .status != "done" and .status != "cancelled")' <<<"$issues" >/dev/null; then
+      summary+=("$ident: held by Paperclip run reconciliation and has open sub-tasks -> left for the Watchdog agent")
+      return 0
+    fi
+    summary+=("$ident: held by Paperclip run reconciliation -> recreated as a fresh copy")
+    [ $DRY = 1 ] && return 0
+    local copy newid newident
+    copy=$(jq -c --arg t "$(jq -r .title <<<"$i" | sed -E 's/ \(retry[^)]*\)$//') (retry)" --arg ident "$ident" '
+      {title:$t, status:"todo", priority:(.priority // "high"), assigneeAgentId, projectId,
+       description: ((.description // "") + "\n\n---\n**Continues " + $ident + "** (held by a stale Paperclip run). Read its comments first and continue from where it stopped; reuse its branch and commits.")}
+      + (if .parentId then {parentId} else {} end) + (if .projectWorkspaceId then {projectWorkspaceId} else {} end)' <<<"$i")
+    newid=$(curl -sf -m 60 -X POST "$API/companies/$CID/issues" -H 'content-type: application/json' -d "$copy" | jq -r '.id // empty')
+    # Paperclip can hand back the existing issue for a duplicate create: never cancel without a new id
+    if [ -z "$newid" ] || [ "$newid" = "$id" ]; then summary+=("$ident: copy was not created; left as is"); return 0; fi
+    newident=$(curl -sf -m 60 "$API/issues/$newid" | jq -r .identifier)
+    curl -sf -X POST "$API/issues/$id/comments" -H 'content-type: application/json' \
+      -d "$(jq -nc --arg b "**Watchdog:** continued in $newident (this task was held by a stale Paperclip run)." '{body:$b}')" >/dev/null
+    curl -sf -X PATCH "$API/issues/$id" -H 'content-type: application/json' -d '{"status":"cancelled"}' >/dev/null
+    return 0
+  fi
   summary+=("$ident: $why -> restarted")
   [ $DRY = 1 ] && return 0
   local body
