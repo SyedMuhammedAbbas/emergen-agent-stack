@@ -27,6 +27,16 @@ if ! grep -qF "$want" "$dropin" 2>/dev/null; then
   systemctl --user restart paperclipai.service
   sleep 10
 fi
+# Repos on /mnt/<drive> are read over the WSL file bridge; git status there takes 5-20s,
+# past Paperclip's 8s workspace scan limit ("could not prepare the workspace").
+scan="$HOME/.config/systemd/user/paperclipai.service.d/git-scan.conf"
+if [ ! -f "$scan" ]; then
+  log "Paperclip git scan timeout drop-in (60s)"
+  printf '[Service]\nEnvironment=PAPERCLIP_WORKSPACE_GIT_SCAN_TIMEOUT_MS=60000\nEnvironment=PAPERCLIP_WORKSPACE_GIT_SCAN_CACHE_TTL_MS=60000\n' > "$scan"
+  systemctl --user daemon-reload
+  systemctl --user restart paperclipai.service
+  sleep 10
+fi
 curl -sf http://127.0.0.1:3100/api/health >/dev/null || curl -sf -o /dev/null http://127.0.0.1:3100/ || die "Paperclip is not answering on :3100 (paperclipai service logs)"
 
 # ---- jev-router ----

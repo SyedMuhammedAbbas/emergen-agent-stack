@@ -59,6 +59,11 @@ for path in "${locals[@]}"; do
   git -C "$path" config core.fileMode false
   # worktrees you made on Windows look "prunable" from WSL; never let a WSL-side gc drop them
   git -C "$path" config gc.worktreePruneExpire never
+  # Windows git and WSL git record file stats differently; without these, every Windows-side
+  # git command makes WSL git re-read the whole tree (50-100s git status on a large repo)
+  git -C "$path" config core.checkStat minimal
+  git -C "$path" config core.trustctime false
+  git -C "$path" config core.untrackedCache true
   log "using local checkout $path"
   git -C "$path" fetch --all --prune -q || warn "fetch failed for $path (offline?)"
   url=$(git -C "$path" remote get-url origin 2>/dev/null || echo "file://$path")
