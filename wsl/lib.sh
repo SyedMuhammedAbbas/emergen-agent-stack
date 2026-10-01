@@ -55,6 +55,7 @@ values = {
     "PROJECT_CATEGORIES": ", ".join(c.strip() for c in os.environ.get("PROJECT_CATEGORIES", "").split(",") if c.strip()),
     "GIT_AUTHOR": os.environ.get("GIT_AUTHOR", ""),
     "DAILY_HOURS": os.environ.get("DAILY_HOURS", "8"),
+    "TIMESHEET_EXCLUDE_REPOS": ", ".join(r.strip() for r in os.environ.get("TIMESHEET_EXCLUDE_REPOS", "agent-stack").split(",") if r.strip()),
 }
 hh = os.environ.get("HERMES_HOME", "")  # Windows path, e.g. C:\Users\me\AppData\Local\hermes
 hm = re.match(r"^([A-Za-z]):\\(.*)$", hh)

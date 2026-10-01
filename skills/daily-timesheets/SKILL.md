@@ -29,6 +29,7 @@ AO='{{AGENT_OPS}}'
    - every git repo under `{{PROJECTS_ROOT}}` up to 3 levels deep (`find {{PROJECTS_ROOT}} -maxdepth 3 -name .git -type d`).
    Use `git log --all --since='<date> 00:00' --until='<date> 23:59:59' --author='{{GIT_AUTHOR}}' --date=format-local:'%H:%M' --format='%ad %h %s'`.
    Skip repos under the Personal category ({{PROJECT_CATEGORIES}} lists the categories; personal work is not billed to Odoo).
+   Skip these repos entirely, whatever their category: {{TIMESHEET_EXCLUDE_REPOS}} (repo folder names). Work on them is never logged in Odoo.
 4. **Group into work streams**: commits that belong to one change (same task key like `INV-SYNC`, same branch `task/...`, or the same feature). Merge commits only mark completion.
 5. **Odoo project per repo**: the `odoo_project_id` of a connected project in `ids.json`, else match the folder name under `{{PROJECTS_ROOT}}/<category>/<Project>` to `odoo projects`. If unsure, ask (step 9) rather than guess.
 6. **Match each stream to an Odoo task**, in this order:
