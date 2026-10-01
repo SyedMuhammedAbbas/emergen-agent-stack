@@ -142,4 +142,27 @@ jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$HOME/.claude/hooks/wa
   ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json
 log "stop hook installed"
 
+# Staleness watchdog: restarts tasks nothing is working on; escalates repeat stalls to the Watchdog agent
+install -m 755 "$REPO_DIR/wsl/watchdog/watchdog.sh" "$STATE_DIR/watchdog.sh"
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/agent-watchdog.service <<UNIT
+[Unit]
+Description=Agent staleness watchdog
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -lc '$STATE_DIR/watchdog.sh >> $STATE_DIR/watchdog.log 2>&1'
+UNIT
+cat > ~/.config/systemd/user/agent-watchdog.timer <<UNIT
+[Unit]
+Description=Run the agent staleness watchdog every ${WATCHDOG_INTERVAL_MIN:-10} min
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=${WATCHDOG_INTERVAL_MIN:-10}min
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl --user daemon-reload
+systemctl --user enable --now agent-watchdog.timer >/dev/null
+log "watchdog timer enabled (every ${WATCHDOG_INTERVAL_MIN:-10} min)"
+
 log "org ready. Agent ids: $IDS_FILE"

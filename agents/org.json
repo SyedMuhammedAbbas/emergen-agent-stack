@@ -67,6 +67,11 @@
                   "description": "Prepare today's timesheet proposal with the daily-timesheets skill. Date: the day this issue was created (local time)."}
     },
     {
+      "key": "watchdog", "name": "Watchdog", "role": "general", "title": "Stalled-task investigator", "icon": "eye",
+      "model": "claude-sonnet-5", "router": false, "reportsTo": "manager", "budgetCents": 1500,
+      "skills": ["systematic-debugging"]
+    },
+    {
       "key": "estimator", "name": "Estimator", "role": "pm", "title": "Solutions Estimator", "icon": "rocket",
       "model": "claude-opus-5-5", "router": false, "reportsTo": "manager", "budgetCents": 2000,
       "skills": ["project-estimation", "xlsx", "{{ENGINEERING_SKILL}}", "system-design", "writing-plans"]
