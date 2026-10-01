@@ -308,6 +308,26 @@ def parse_hours(s) -> float:
     return float(m.group()) if m else 0.0
 
 
+def short_title(title: str) -> str:
+    """'[ODOO-1] QA: 179: 153: Backend: X (long detail)' -> 'Backend: X'"""
+    t = re.sub(r"^\[ODOO-\d+\]\s*(QA:\s*)?(\d+:\s*)*", "", title)
+    return re.sub(r"\s*\(.*$", "", t)[:80]
+
+
+def item_update(it: dict) -> str:
+    """One plain line for Odoo: what happened to the ticket, no agent narrative."""
+    if it.get("update"):
+        return it["update"]
+    if it.get("qa") == "PASS":
+        return "QA passed on staging"
+    if it.get("qa") == "FAIL":
+        return "QA failed on staging"
+    if it.get("pr"):
+        return f"Fix ready for review: {it['pr']}"
+    first = re.split(r"(?<=[.;])\s", (it.get("changed") or ["-"])[-1].split(": ", 1)[-1])[0]
+    return first[:140]
+
+
 def cmd_digest(cfg):
     pc = Paperclip(cfg)
     now = dt.datetime.now(dt.timezone.utc)
@@ -319,11 +339,12 @@ def cmd_digest(cfg):
         m = re.match(r"\[ODOO-(\d+)\]", issue.get("title", ""))
         if not m:
             continue
-        summaries = []
+        summaries, latest = [], None
         for c in sorted(pc.comments(issue["id"]), key=lambda c: c["createdAt"]):
             created = dt.datetime.fromisoformat(c["createdAt"].replace("Z", "+00:00"))
             if created > since and (s := parse_summary(c.get("body", ""))):
                 summaries.append(s)
+                latest = created
         if not summaries:
             continue
         item = pending.get(issue["id"], {
@@ -331,6 +352,8 @@ def cmd_digest(cfg):
             "odoo_task_id": int(m.group(1)), "title": issue["title"],
             "hours": 0.0, "changed": [], "pr": None, "qa": None, "stage": None,
         })
+        # timesheet date = local day of the latest summary, not the day you approve
+        item["date"] = latest.astimezone().date().isoformat()
         for s in summaries:
             item["hours"] = round(item["hours"] + parse_hours(s.get("hours")), 2)
             if s.get("changed"):
@@ -361,12 +384,8 @@ def cmd_digest(cfg):
         if it.get("kind") == "proposal":  # renumbered above, so always re-show it
             out.append("\n" + format_proposal(it))
             continue
-        changed = "; ".join(it["changed"][-3:])[:300] or "-"
-        out.append(
-            f"\n**{it['n']}. {it['title']}** ({it['identifier']}, status {it.get('status')})\n"
-            f"   {changed}\n"
-            f"   PR: {it['pr'] or '-'} | QA: {it['qa'] or '-'} | Hours: {it['hours']} | Stage → {it['stage'] or 'unchanged'}"
-        )
+        out.append(f"**{it['n']}.** #{it['odoo_task_id']} {short_title(it['title'])}: {item_update(it)} · "
+                   f"{it['hours']}h · stage → {it['stage'] or 'unchanged'}")
     out.append("\nReply: `approve 1,2` · `edit 2 hours=1.5 stage=Testing` · `reject 3 <reason>`. "
                "Nothing is written to Odoo until you approve.")
     print("\n".join(out))
@@ -407,8 +426,8 @@ def approve(cfg, items, dry_run=False):
         actions = []
         if it["hours"] > 0 and project_id:
             vals = {"employee_id": emp, "project_id": project_id, "task_id": it["odoo_task_id"],
-                    "unit_amount": it["hours"], "date": today,
-                    "name": f"AI agents: {'; '.join(it['changed'][-2:])[:200] or it['title']}"}
+                    "unit_amount": it["hours"], "date": it.get("date") or today,
+                    "name": item_update(it)}
             if not dry_run:
                 odoo.call("account.analytic.line", "create", vals)
             actions.append(f"{it['hours']}h timesheet")
@@ -421,8 +440,7 @@ def approve(cfg, items, dry_run=False):
                 actions.append(f"stage → {it['stage']}")
             else:
                 actions.append(f"stage '{it['stage']}' not found, left unchanged")
-        note = (f"AI agent work approved: {'; '.join(it['changed'][-3:])[:500]}<br/>"
-                f"PR: {it['pr'] or '-'} · QA: {it['qa'] or '-'} · Paperclip {it['identifier']}")
+        note = item_update(it) + (f" ({it['pr']})" if it.get("pr") and it["pr"] not in item_update(it) else "")
         if not dry_run:
             odoo.call("project.task", "message_post", [it["odoo_task_id"]], body=note,
                       message_type="comment", subtype_xmlid="mail.mt_note")
