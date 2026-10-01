@@ -815,20 +815,29 @@ def cmd_standup(cfg):
     blocked = group([(t["project_id"][1] if t["project_id"] else None, t["id"], t["name"]) for t in mine
                      if t["stage_id"] and re.search(r"block|on hold", t["stage_id"][1], re.I)])
 
+    # "Ticket#N" uses Odoo's Task Number field when the database has one, else the task id
+    all_ids = list({tid for g in (completed, working, blocked) for rows in g.values() for tid, _ in rows if tid})
+    has_num = "x_task_number" in odoo.call("project.task", "fields_get", [], attributes=["type"])
+    nums = {t["id"]: t["x_task_number"] for t in odoo.call("project.task", "read", all_ids, fields=["x_task_number"])} \
+        if has_num and all_ids else {}
+    multi = len({p for g in (completed, working, blocked) for p in g}) > 1
+
     def section(title, by_proj, empty):
-        lines = [f"{title}:"]
+        lines = [f"{title}: ", ""]
         if not by_proj:
-            return lines + [empty]
+            return lines + [f"* {empty}"]
         for proj, rows in by_proj.items():
-            lines.append(f"{proj}:")
-            lines += [f"- #{tid} {name}" if tid else f"- {name}" for tid, name in rows]
+            for tid, name in rows:
+                text = re.sub(r"\s*\(.*$", "", re.sub(r"^(\d+:\s*)+", "", name))
+                ticket = f" Ticket#{nums.get(tid) or tid}" if tid else ""
+                lines.append(f"* {proj + ' ' if multi else ''}{text}{ticket}")
         return lines
 
     body = [f"{cfg.get('standup_title', 'DSM')} {_ordinal(today.day)} {MONTHS[today.month - 1]} {today.year}", "",
             cfg.get("standup_name", ""), ""]
-    body += section("Completed", completed, f"No timesheets logged on {prev.strftime('%a %d %b')}.") + [""]
-    body += section("Working on", working, "Nothing in an active stage.") + [""]
-    body += section("Blockers", blocked, "None")
+    body += section("Completed", completed, f"No timesheets logged on {prev.strftime('%a %d %b')}") + ["", ""]
+    body += section("Working on", working, "Nothing in an active stage") + ["", ""]
+    body += section("Blocker", blocked, "None")
     print(f"**Standup ready** (completed = timesheets of {prev.strftime('%a %d %b')}). Copy:\n```\n" + "\n".join(body) + "\n```")
 
 
