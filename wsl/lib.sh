@@ -1,5 +1,17 @@
 # Shared helpers for the WSL setup scripts. Source it; do not run it.
+# wsl/ is the shared Linux/macOS layer: the same scripts run inside WSL (Windows install) and natively on macOS
+# (mac/install.sh). macOS-only branches are guarded with [ "$(uname)" = Darwin ]; the Linux/WSL paths are unchanged.
 set -euo pipefail
+
+if [ "$(uname)" = Darwin ]; then
+  # Homebrew tools (jq, gh, python3, bash 5) first in PATH, also when a script is run from a bare shell
+  for _b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$_b" ] && { eval "$("$_b" shellenv)"; break; }; done
+  # macOS ships bash 3.2; these scripts need bash 4+ (declare -A, empty arrays under set -u): re-run under Homebrew bash
+  if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    for _b in /opt/homebrew/bin/bash /usr/local/bin/bash; do [ -x "$_b" ] && exec "$_b" "$0" "$@"; done
+    printf '[agent-stack] error: bash 4+ is required on macOS. Run: brew install bash\n' >&2; exit 1
+  fi
+fi
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="${HOME}/.agent-stack"
@@ -34,6 +46,8 @@ need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found. $2"; }
 # Usage: render_file <file> [partials_dir[:partials_dir...]]   -> prints the result; fails on unresolved placeholders
 render_file() {
   # Windows path of the Hermes home (for skills that call the bridge); HERMES_HOME in config.env wins
+  # macOS: Hermes lives at ~/.hermes by default (a POSIX path)
+  if [ -z "${HERMES_HOME:-}" ] && [ "$(uname)" = Darwin ]; then export HERMES_HOME="$HOME/.hermes"; fi
   if [ -z "${HERMES_HOME:-}" ] && command -v cmd.exe >/dev/null 2>&1; then
     local lad; lad=$(cd /mnt/c 2>/dev/null && cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null </dev/null | tr -d '\r')
     [ -n "$lad" ] && [ "$lad" != "%LOCALAPPDATA%" ] && export HERMES_HOME="$lad\\hermes"
@@ -66,6 +80,15 @@ values.update({
     "HERMES_STATE_WSL": f"{hh_wsl}/state/agent_ops",
     "HERMES_STATE_WIN": f"{hh}\\state\\agent_ops",
 })
+if sys.platform == "darwin":
+    # macOS: Hermes runs natively (default ~/.hermes); the "WSL" and "Windows" state paths are the same POSIX path
+    hh = hh.rstrip("/")
+    values.update({
+        "HERMES_PY": f"{hh}/hermes-agent/venv/bin/python",
+        "AGENT_OPS": f"{hh}/scripts/agent_ops.py",
+        "HERMES_STATE_WSL": f"{hh}/state/agent_ops",
+        "HERMES_STATE_WIN": f"{hh}/state/agent_ops",
+    })
 for k, v in values.items():
     text = text.replace("{{" + k + "}}", v)
 left = sorted(set(re.findall(r"\{\{[A-Za-z_-]+\}\}", text)))

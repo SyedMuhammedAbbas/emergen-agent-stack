@@ -59,12 +59,16 @@ GLOBAL=("$REPO_DIR"/skills/*/ "$OUT"/*/)
 for d in $(departments); do for s in "$REPO_DIR"/org/"$d"/skills/*/; do [ -d "$s" ] && GLOBAL+=("$s"); done; done
 install_set "$HOME/.claude/skills" "${GLOBAL[@]}"
 
+if [ "$(uname)" = Darwin ]; then
+  :  # macOS: ~/.claude/skills above is the only Claude Code install; no Windows side
+else
 WINHOME=$(cd /mnt/c 2>/dev/null && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null </dev/null | tr -d '\r')
 if [ -n "$WINHOME" ] && [ "$WINHOME" != "%USERPROFILE%" ]; then
   install_set "$(wslpath -u "$WINHOME")/.claude/skills" "${GLOBAL[@]}"
 else
   warn "Windows home not found; skipped Claude Code on Windows"
 fi
+fi  # end Linux/WSL
 
 # 3. project context skills -> that project's folder (project-skills/projects.json, else by name under PROJECTS_ROOT)
 for ps in "$REPO_DIR"/project-skills/*/; do

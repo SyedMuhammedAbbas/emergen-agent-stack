@@ -34,11 +34,15 @@ import urllib.request
 import xmlrpc.client
 from pathlib import Path
 
-HERMES_HOME = Path(os.environ.get("HERMES_HOME") or Path(os.environ["LOCALAPPDATA"]) / "hermes")
+# Windows: %LOCALAPPDATA%\hermes. macOS/Linux (no LOCALAPPDATA): ~/.hermes, Hermes's default there.
+HERMES_HOME = Path(os.environ.get("HERMES_HOME")
+                   or (Path(os.environ["LOCALAPPDATA"]) / "hermes" if os.environ.get("LOCALAPPDATA") else Path.home() / ".hermes"))
+IS_WINDOWS = os.name == "nt"
+BRIDGE_SETUP = "windows/hermes-bridge.ps1" if IS_WINDOWS else "mac/hermes-bridge.sh"
 STATE_DIR = HERMES_HOME / "state" / "agent_ops"
 CONFIG_FILE = HERMES_HOME / "scripts" / "agent_ops.config.json"
 
-# Instance values (ids, employee) come from agent_ops.config.json, written by windows/hermes-bridge.ps1.
+# Instance values (ids, employee) come from agent_ops.config.json, written by windows/hermes-bridge.ps1 (mac/hermes-bridge.sh on macOS).
 DEFAULT_CONFIG = {
     "paperclip_api": "http://localhost:3100/api",
     "company_id": "",
@@ -46,7 +50,7 @@ DEFAULT_CONFIG = {
     "estimator_agent_id": "",
     "ready_tag": "agent-ready",
     "timesheet_employee": "",
-    # Odoo project id (or name) -> Paperclip project id; written by connect-project.ps1
+    # Odoo project id (or name) -> Paperclip project id; written by connect-project.ps1 (mac/connect-project.sh on macOS)
     "project_map": {},
     "standup_title": "DSM",
     "standup_name": "",
@@ -86,7 +90,7 @@ def load_config() -> dict:
         cfg.update(json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig")))
     missing = [k for k in REQUIRED if not cfg.get(k)]
     if missing:
-        raise SystemExit(f"{CONFIG_FILE} is missing {', '.join(missing)}. Re-run windows/hermes-bridge.ps1.")
+        raise SystemExit(f"{CONFIG_FILE} is missing {', '.join(missing)}. Re-run {BRIDGE_SETUP}.")
     return cfg
 
 
@@ -481,7 +485,10 @@ DISCORD_MAX_BYTES = 9_500_000             # per file, Discord bot upload (10 MB 
 
 
 def local_path(p: str) -> Path:
-    """Accept WSL (/mnt/d/..., /home/...) or Windows paths; return a path Windows Python can open."""
+    """Accept WSL (/mnt/d/..., /home/...) or Windows paths; return a path Windows Python can open.
+    On macOS the agents and Hermes share one filesystem, so paths are used as they are."""
+    if not IS_WINDOWS:
+        return Path(p)
     m = re.match(r"^/mnt/([a-zA-Z])/(.*)$", p)
     if m:
         return Path(f"{m.group(1).upper()}:/{m.group(2)}")
@@ -903,7 +910,10 @@ def cmd_odoo(args):
 
 def cmd_diskguard(cfg):
     import shutil
-    drive = cfg.get("disk_guard_drive") or "C:\\"
+    # Windows: C: holds WSL's disk file. macOS: the startup volume ("/") holds the agents' worktrees and Paperclip's DB.
+    drive = cfg.get("disk_guard_drive") or ("C:\\" if IS_WINDOWS else "/")
+    why = "so WSL's disk can't fill up and go read-only" if IS_WINDOWS else "so the disk can't fill up mid-run"
+    cleanup = "Disk Cleanup, Docker images, the Android emulator" if IS_WINDOWS else "Docker images, Xcode DerivedData, simulators"
     low, high = float(cfg.get("disk_min_free_gb") or 4), float(cfg.get("disk_resume_free_gb") or 6)
     free = shutil.disk_usage(drive).free / 1024 ** 3
     st = read_state("diskguard", {})
@@ -920,8 +930,8 @@ def cmd_diskguard(cfg):
         write_state("diskguard", {"paused": [a["id"] for a in agents], "issues": active,
                                   "at": now.isoformat(timespec="minutes"), "alerted": now.isoformat()})
         print(f"🛑 **Disk guard: {drive} has {free:.1f} GB free** (limit {low:g} GB). Paused {len(agents)} agents "
-              f"({len(active)} tasks waiting) so WSL's disk can't fill up and go read-only.\n"
-              f"Free space on {drive} (Disk Cleanup, Docker images, the Android emulator). Agents resume automatically "
+              f"({len(active)} tasks waiting) {why}.\n"
+              f"Free space on {drive} ({cleanup}). Agents resume automatically "
               f"above {high:g} GB, and their interrupted tasks restart.")
     elif st.get("paused") and free >= high:
         for aid in st["paused"]:

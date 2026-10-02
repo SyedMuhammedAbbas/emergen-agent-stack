@@ -27,7 +27,8 @@ done
 CID=$(jq -r .company "$IDS_FILE"); MGR=$(jq -r .manager "$IDS_FILE")
 gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login)"
 
-slug=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')
+# sed -E: same result as GNU 's/[^a-z0-9]\+/-/g', and also works with BSD sed on macOS (no \+ in basic regex)
+slug=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-//; s/-$//')
 dir="$HOME/projects/$slug"; mkdir -p "$dir"
 
 # ---- clone / update ----
@@ -55,6 +56,8 @@ done
 for path in "${locals[@]}"; do
   path=$(realpath "$path")
   git -C "$path" rev-parse --git-dir >/dev/null 2>&1 || die "$path is not a git repository"
+  # macOS: a native checkout used by native git only; the Windows/WSL git settings below are not needed
+  if [ "$(uname)" != Darwin ]; then
   # a Windows checkout seen from WSL: stop git flagging every file as changed on mode/line endings
   git -C "$path" config core.fileMode false
   # worktrees you made on Windows look "prunable" from WSL; never let a WSL-side gc drop them
@@ -64,6 +67,7 @@ for path in "${locals[@]}"; do
   git -C "$path" config core.checkStat minimal
   git -C "$path" config core.trustctime false
   git -C "$path" config core.untrackedCache true
+  fi  # end Linux/WSL
   log "using local checkout $path"
   git -C "$path" fetch --all --prune -q || warn "fetch failed for $path (offline?)"
   url=$(git -C "$path" remote get-url origin 2>/dev/null || echo "file://$path")
