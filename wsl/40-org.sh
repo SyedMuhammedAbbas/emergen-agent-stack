@@ -26,18 +26,19 @@ fi
 ids=$(jq -c --arg c "$CID" '.company=$c' <<<"$ids"); save
 log "company $COMPANY_NAME ($CID)"
 
-# ---- skills: repo skills + third-party folder -> Paperclip managed dir -> import ----
+# ---- skills: repo skills + project context skills (+ optional extra folder) -> Paperclip managed dir -> import ----
 MANAGED="$HOME/.paperclip/instances/default/skills/$CID"
 mkdir -p "$MANAGED"
 imported=0
-for src in "$REPO_DIR"/skills/*/ "${SKILLS_SOURCE:-/nonexistent}"/*/; do
+for src in "$REPO_DIR"/skills/*/ "$REPO_DIR"/project-skills/*/ "${SKILLS_SOURCE:-/nonexistent}"/*/; do
   [ -f "$src/SKILL.md" ] || continue
   name=$(basename "$src")
-  # this repo's skills win over a same-named third-party folder
-  if [ -d "$REPO_DIR/skills/$name" ] && [ "${src%/}" != "$REPO_DIR/skills/$name" ]; then continue; fi
+  # this repo's skills win over a same-named folder in SKILLS_SOURCE
+  case "${src%/}" in "$REPO_DIR"/skills/*|"$REPO_DIR"/project-skills/*) ;;
+    *) { [ -d "$REPO_DIR/skills/$name" ] || [ -d "$REPO_DIR/project-skills/$name" ]; } && continue ;; esac
   rm -rf "${MANAGED:?}/$name"; cp -r "$src" "$MANAGED/$name"
-  # repo skills may use config placeholders ({{PROJECTS_ROOT}}, {{STACK}}, ...)
-  if [ "${src%/}" = "$REPO_DIR/skills/$name" ]; then
+  # skills may use config placeholders ({{PROJECTS_ROOT}}, {{STACK}}, ...)
+  if grep -q '{{' "$src/SKILL.md"; then
     render_file "$src/SKILL.md" > "$MANAGED/$name/SKILL.md" || die "rendering skill $name failed"
   fi
   paperclipai skills import "$MANAGED/$name" -C "$CID" --json >/dev/null && imported=$((imported+1)) || warn "skill import failed: $name"
@@ -164,5 +165,8 @@ UNIT
 systemctl --user daemon-reload
 systemctl --user enable --now agent-watchdog.timer >/dev/null
 log "watchdog timer enabled (every ${WATCHDOG_INTERVAL_MIN:-10} min)"
+
+# same skills + role standards for Claude Code (WSL and Windows) and each project folder
+bash "$REPO_DIR/wsl/60-sync-skills.sh" || warn "skill sync for Claude Code failed (run wsl/60-sync-skills.sh)"
 
 log "org ready. Agent ids: $IDS_FILE"

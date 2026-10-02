@@ -1,0 +1,19 @@
+# Vendored skills present on this machine (synced everywhere by wsl/60-sync-skills.sh) but not committed:
+# proprietary, or no license recorded. A fresh machine collects them with windows/collect-skills.ps1.
+# See THIRD_PARTY.md.
+/xlsx/
+/apple-design/
+/brand/
+/slides/
+/find-skills/
+/ui-ux-pro-max/
+/accessibility-review/
+/design-critique/
+/ux-copy/
+/code-review/
+/deploy-checklist/
+/testing-strategy/
+/architecture/
+/system-design/
+/incident-response/
+/next-best-practices/

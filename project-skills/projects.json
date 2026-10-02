@@ -1,0 +1,7 @@
+{
+  "_comment": "context skill -> project folder (relative to PROJECTS_ROOT). 60-sync-skills.sh copies each skill into <folder>/.claude/skills.",
+  "neurax-context": "Emergen/NeuraX",
+  "khudmukhtaar-context": "Emergen/khudmukhtaar",
+  "radbase-context": "Personal/reports-scoped",
+  "prd-scope-discipline": "Emergen/NeuraX"
+}

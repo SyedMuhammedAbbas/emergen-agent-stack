@@ -166,15 +166,30 @@ Besides the bridge, Hermes can join the org as **Ops (Hermes)**, so the Manager 
 
 Ops (Hermes) follows the same rule: it only proposes Odoo changes; you approve them in Discord.
 
-## Skills
+## Skills and role standards (one source for every tool)
 
-| Skill | Where | Purpose |
+This repo is the single source of skills and role standards. The same files drive the Paperclip agents and Claude Code (or any tool that reads `.claude/skills`), so every role works the same way in every project, whoever or whatever does the work.
+
+| What | Where | Installed to |
 |---|---|---|
-| `no-slop` | `skills/` | No invented APIs or results, no em dashes, no AI filler in code or docs |
-| `delivery-gate` | `skills/` | Task and milestone validation checklists |
-| `project-estimation` | `skills/` | Requirements to project folder and estimation workbook |
-| your engineering standards | `skills/<ENGINEERING_SKILL>` | Stack standards and checklists every engineer follows. `emergen-engineering` is an example |
-| third-party skills | `SKILLS_SOURCE` | Listed in `skills/THIRD_PARTY.md`; not committed (licenses) |
+| General skills (ours + vendored) | `skills/` | Paperclip, Claude Code in WSL and on Windows (`~/.claude/skills`) |
+| Role standards | `agents/*.md` + `agents/_partials/` | Paperclip agent prompts, and `role-<key>` skills in Claude Code (generated, never edited by hand) |
+| Project context | `project-skills/<name>/`, mapped in `project-skills/projects.json` | Paperclip (all agents via `EXTRA_SKILLS`) and that project's folder `.claude/skills` |
+
+`wsl/60-sync-skills.sh` does the install (run by `40-org.sh`, or on its own after editing a skill; `--dry-run` to preview). It only replaces or removes skills it installed (tracked in `.agent-stack-managed`), never your other skills.
+
+| Our skills | Purpose |
+|---|---|
+| `no-slop` | No invented APIs or results, no em dashes, no AI filler in code or docs |
+| `delivery-gate` | Task and milestone validation checklists |
+| `qa-evidence` | Screenshots/recordings proving an Odoo ticket is fixed, approved before they reach Odoo |
+| `project-estimation` | Requirements to project folder and estimation workbook |
+| `daily-timesheets` | End-of-day timesheet proposal |
+| your engineering standards (`ENGINEERING_SKILL`) | Stack standards and checklists every engineer follows. `emergen-engineering` is an example |
+
+Third-party skills, their sources and licenses: `skills/THIRD_PARTY.md`. Proprietary or unlicensed ones stay out of git (`skills/.gitignore`) and are restored on a new machine by `windows/collect-skills.ps1`.
+
+To add a project: write `project-skills/<name>-context/SKILL.md`, map it in `projects.json`, add it to `EXTRA_SKILLS`, run `40-org.sh`.
 
 Skills in `skills/` can use `{{COMPANY_NAME}}`, `{{STACK}}`, `{{ENGINEERING_SKILL}}`, `{{PROJECTS_ROOT}}`, `{{PROJECTS_ROOT_WINDOWS}}` and `{{PROJECT_CATEGORIES}}`; they are filled from `config.env` when installed.
 
