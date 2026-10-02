@@ -10,7 +10,7 @@ All skills live in this repo and `wsl/60-sync-skills.sh` installs them for Paper
 
 | Skill | Used by | Source / license |
 |---|---|---|
-| no-slop, delivery-gate, project-estimation, daily-timesheets, qa-evidence, emergen-engineering (`ENGINEERING_SKILL`) | all roles | this repo |
+| no-slop, delivery-gate, project-estimation, daily-timesheets, qa-evidence, odoo-tickets, test-integrity, tool-vetting, emergen-engineering (`ENGINEERING_SKILL`) | all roles | this repo |
 | verification-before-completion, test-driven-development, systematic-debugging, writing-plans, receiving-code-review | all / engineers / QA | Superpowers (github.com/obra/superpowers), MIT |
 | vercel-react-best-practices, vercel-react-native-skills | Frontend | github.com/vercel-labs/agent-skills, MIT |
 | documentation-writer | Docs | github.com/github/awesome-copilot, MIT |

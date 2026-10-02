@@ -188,6 +188,8 @@ This repo is the single source of skills and role standards. The same files driv
 | `qa-evidence` | Screenshots/recordings proving an Odoo ticket is fixed, approved before they reach Odoo |
 | `project-estimation` | Requirements to project folder and estimation workbook |
 | `daily-timesheets` | End-of-day timesheet proposal |
+| `test-integrity` | Tests written from the requirement and proven to fail when the behaviour breaks (red before green, mutation testing on changed code); QA reviews them independently |
+| `tool-vetting` | Safety checklist and board approval before installing any package, tool, script, extension or skill |
 | `odoo-tickets` | How tickets are written (titles, descriptions a non-engineer can follow, structure) and how a messy Odoo project is cleaned up through approved proposals |
 | your engineering standards (`ENGINEERING_SKILL`) | Stack standards and checklists every engineer follows. `emergen-engineering` is an example |
 

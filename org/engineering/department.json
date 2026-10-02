@@ -37,7 +37,8 @@
         "architecture",
         "system-design",
         "testing-strategy",
-        "writing-plans"
+        "writing-plans",
+        "test-integrity"
       ]
     },
     {
@@ -62,7 +63,8 @@
         "ux-copy",
         "test-driven-development",
         "systematic-debugging",
-        "receiving-code-review"
+        "receiving-code-review",
+        "test-integrity"
       ]
     },
     {
@@ -81,7 +83,8 @@
         "system-design",
         "test-driven-development",
         "systematic-debugging",
-        "receiving-code-review"
+        "receiving-code-review",
+        "test-integrity"
       ]
     },
     {
@@ -100,7 +103,8 @@
         "deploy-checklist",
         "incident-response",
         "systematic-debugging",
-        "receiving-code-review"
+        "receiving-code-review",
+        "test-integrity"
       ]
     },
     {
@@ -118,7 +122,8 @@
         "delivery-gate",
         "code-review",
         "systematic-debugging",
-        "receiving-code-review"
+        "receiving-code-review",
+        "test-integrity"
       ]
     },
     {
@@ -140,7 +145,8 @@
         "accessibility-review",
         "systematic-debugging",
         "qa-evidence",
-        "odoo-tickets"
+        "odoo-tickets",
+        "test-integrity"
       ]
     },
     {

@@ -3,7 +3,8 @@
   "commonSkills": [
     "paperclip",
     "no-slop",
-    "verification-before-completion"
+    "verification-before-completion",
+    "tool-vetting"
   ],
   "routerEnv": {
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",
