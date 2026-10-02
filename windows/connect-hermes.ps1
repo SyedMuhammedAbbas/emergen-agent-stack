@@ -74,7 +74,7 @@ $ids = $idsJson | ConvertFrom-Json
 if (-not $ids.company -or -not $ids.manager) { throw "run install.ps1 first (Paperclip ids missing)" }
 
 $utf8 = New-Object System.Text.UTF8Encoding($false)
-$instr = [IO.File]::ReadAllText((Join-Path $RepoDir 'agents\ops-hermes.md'), $utf8).Replace('{{COMPANY_NAME}}', $cfg.COMPANY_NAME)
+$instr = [IO.File]::ReadAllText((Join-Path $RepoDir 'org\operations\ops-hermes.md'), $utf8).Replace('{{COMPANY_NAME}}', $cfg.COMPANY_NAME)
 $adapterConfig = [ordered]@{
     apiBaseUrl = $hermesApi; apiKey = $key; paperclipApiUrl = 'http://127.0.0.1:3100'
     sessionKeyStrategy = 'issue'; timeoutSec = 900; instructions = $instr

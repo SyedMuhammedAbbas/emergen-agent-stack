@@ -1,0 +1,42 @@
+{
+  "key": "operations",
+  "name": "Operations",
+  "description": "Keeps the factory running: timesheets and standups, stalled-task watchdog. The Hermes bridge agent (ops-hermes.md) is created by windows/connect-hermes.ps1.",
+  "head": "timekeeper",
+  "agents": [
+    {
+      "key": "timekeeper",
+      "name": "Timekeeper",
+      "role": "general",
+      "title": "Timesheets and standups",
+      "icon": "star",
+      "model": "claude-sonnet-5",
+      "router": false,
+      "reportsTo": "manager",
+      "budgetCents": 1500,
+      "skills": [
+        "daily-timesheets",
+        "odoo-tickets"
+      ],
+      "routine": {
+        "title": "Daily timesheets",
+        "cronEnv": "TIMESHEET_SCHEDULE",
+        "description": "Prepare today's timesheet proposal with the daily-timesheets skill. Date: the day this issue was created (local time)."
+      }
+    },
+    {
+      "key": "watchdog",
+      "name": "Watchdog",
+      "role": "general",
+      "title": "Stalled-task investigator",
+      "icon": "eye",
+      "model": "claude-sonnet-5",
+      "router": false,
+      "reportsTo": "manager",
+      "budgetCents": 1500,
+      "skills": [
+        "systematic-debugging"
+      ]
+    }
+  ]
+}

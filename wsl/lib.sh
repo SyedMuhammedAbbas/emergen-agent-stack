@@ -30,19 +30,19 @@ load_node() {
 
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found. $2"; }
 
-# Fill {{KEY}} placeholders from config (and {{name}} partials when a partials dir is given).
-# Usage: render_file <file> [partials_dir]   -> prints the result; fails on unresolved placeholders
+# Fill {{KEY}} placeholders from config (and {{name}} partials from the partials dirs, first match wins).
+# Usage: render_file <file> [partials_dir[:partials_dir...]]   -> prints the result; fails on unresolved placeholders
 render_file() {
   # Windows path of the Hermes home (for skills that call the bridge); HERMES_HOME in config.env wins
   if [ -z "${HERMES_HOME:-}" ] && command -v cmd.exe >/dev/null 2>&1; then
-    local lad; lad=$(cd /mnt/c 2>/dev/null && cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')
+    local lad; lad=$(cd /mnt/c 2>/dev/null && cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null </dev/null | tr -d '\r')
     [ -n "$lad" ] && [ "$lad" != "%LOCALAPPDATA%" ] && export HERMES_HOME="$lad\\hermes"
   fi
   python3 - "$1" "${2:-}" <<'PY'
 import os, sys, pathlib, re
 text = pathlib.Path(sys.argv[1]).read_text()
-if sys.argv[2]:
-    for p in pathlib.Path(sys.argv[2]).glob("*.md"):
+for d in [d for d in sys.argv[2].split(":") if d]:
+    for p in pathlib.Path(d).glob("*.md"):
         text = text.replace("{{" + p.stem + "}}", p.read_text().strip())
 root = os.environ.get("PROJECTS_ROOT", "")
 m = re.match(r"^/mnt/([a-z])/(.*)$", root)
@@ -74,3 +74,38 @@ if left:
 print(text.rstrip())
 PY
 }
+
+# Departments: org/company.json + org/<dept>/department.json for each key in DEPARTMENTS (config.env,
+# comma-separated; default: every department whose department.json has "enabled" not false).
+# Prints one merged org: {commonSkills, routerEnv, departments:[...], agents:[... each with "department"]}.
+departments() {
+  local want="${DEPARTMENTS:-}" d out=()
+  if [ -n "$want" ]; then
+    for d in ${want//,/ }; do [ -f "$REPO_DIR/org/$d/department.json" ] || die "DEPARTMENTS: org/$d/department.json not found"; out+=("$d"); done
+  else
+    for d in "$REPO_DIR"/org/*/department.json; do
+      [ "$(jq -r '.enabled == false' "$d")" = true ] && continue
+      out+=("$(basename "$(dirname "$d")")")
+    done
+  fi
+  printf '%s
+' "${out[@]}"
+}
+build_org() {
+  local parts=() d
+  for d in $(departments); do parts+=("$(render_file "$REPO_DIR/org/$d/department.json")"); done
+  render_file "$REPO_DIR/org/company.json" | jq --argjson deps "$(printf '%s
+' "${parts[@]}" | jq -s .)" '
+    del(._comment) + {departments: [$deps[] | {key, name, description, head}],
+                      agents: [$deps[] | .key as $k | .agents[] | . + {department: $k}]}'
+}
+# Role file and partials dirs for an agent key: "<file>|<dir>:<dir>"
+role_paths() {
+  local d
+  for d in $(departments) operations; do
+    [ -f "$REPO_DIR/org/$d/$1.md" ] && { printf '%s|%s:%s
+' "$REPO_DIR/org/$d/$1.md" "$REPO_DIR/org/$d/_partials" "$REPO_DIR/org/_partials"; return; }
+  done
+  return 1
+}
+render_role() { local rp; rp=$(role_paths "$1") || die "no role file org/*/$1.md"; render_file "${rp%%|*}" "${rp#*|}"; }

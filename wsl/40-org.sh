@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run as the agent user. Creates/updates the Paperclip company, skills and agents from agents/org.json.
+# Run as the agent user. Creates/updates the Paperclip company, skills and agents from org/ (one folder per department).
 # Safe to re-run: existing agents are updated in place (matched by saved id, then by name).
 source "$(dirname "$0")/lib.sh"
 load_config
@@ -9,9 +9,10 @@ API=http://127.0.0.1:3100/api
 CLAUDE="$HOME/.local/bin/claude"
 mkdir -p "$STATE_DIR"
 [ -n "${COMPANY_NAME:-}" ] || die "config.env: COMPANY_NAME is empty"
-# org.json with {{ENGINEERING_SKILL}} etc. filled in
+# all enabled departments merged, with {{ENGINEERING_SKILL}} etc. filled in
 ORG="$STATE_DIR/org.rendered.json"
-render_file "$REPO_DIR/agents/org.json" > "$ORG"
+build_org > "$ORG"
+log "departments: $(jq -r '[.departments[].name] | join(", ")' "$ORG")"
 [ -f "$IDS_FILE" ] || echo '{}' > "$IDS_FILE"
 ids=$(cat "$IDS_FILE")
 save() { echo "$ids" | jq . > "$IDS_FILE"; }
@@ -30,11 +31,12 @@ log "company $COMPANY_NAME ($CID)"
 MANAGED="$HOME/.paperclip/instances/default/skills/$CID"
 mkdir -p "$MANAGED"
 imported=0
-for src in "$REPO_DIR"/skills/*/ "$REPO_DIR"/project-skills/*/ "${SKILLS_SOURCE:-/nonexistent}"/*/; do
+DEPT_SKILLS=(); for d in $(departments); do DEPT_SKILLS+=("$REPO_DIR"/org/"$d"/skills/*/); done
+for src in "$REPO_DIR"/skills/*/ "${DEPT_SKILLS[@]}" "$REPO_DIR"/project-skills/*/ "${SKILLS_SOURCE:-/nonexistent}"/*/; do
   [ -f "$src/SKILL.md" ] || continue
   name=$(basename "$src")
   # this repo's skills win over a same-named folder in SKILLS_SOURCE
-  case "${src%/}" in "$REPO_DIR"/skills/*|"$REPO_DIR"/project-skills/*) ;;
+  case "${src%/}" in "$REPO_DIR"/skills/*|"$REPO_DIR"/org/*|"$REPO_DIR"/project-skills/*) ;;
     *) { [ -d "$REPO_DIR/skills/$name" ] || [ -d "$REPO_DIR/project-skills/$name" ]; } && continue ;; esac
   rm -rf "${MANAGED:?}/$name"; cp -r "$src" "$MANAGED/$name"
   # skills may use config placeholders ({{PROJECTS_ROOT}}, {{STACK}}, ...)
@@ -53,7 +55,7 @@ while read -r key slug; do
 done < <(paperclipai skills list -C "$CID" | sed -n 's/.* key=\([^ ]*\) slug=\([^ ]*\) .*/\1 \2/p')
 
 # ---- agents ----
-render() { render_file "$REPO_DIR/agents/$1.md" "$REPO_DIR/agents/_partials"; }
+render() { render_role "$1"; }
 
 existing_agents=$(curl -sf "$API/companies/$CID/agents")
 router_env=$(jq -c .routerEnv "$ORG")

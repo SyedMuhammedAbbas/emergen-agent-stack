@@ -1,0 +1,14 @@
+{
+  "_comment": "Company-wide settings. Departments live in org/<key>/department.json; DEPARTMENTS in config.env picks which are installed.",
+  "commonSkills": [
+    "paperclip",
+    "no-slop",
+    "verification-before-completion"
+  ],
+  "routerEnv": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS": "1",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "160000",
+    "ENABLE_TOOL_SEARCH": "true"
+  }
+}

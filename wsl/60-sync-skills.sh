@@ -2,7 +2,8 @@
 # One source of truth for skills and role standards, installed for every tool:
 #   skills/          general skills (ours + vendored third-party, see skills/THIRD_PARTY.md)
 #   project-skills/  <project>-context skills, one per connected project
-#   agents/*.md      role standards; rendered here into role-<key> skills
+#   org/<dept>/*.md  role standards per department; rendered here into role-<key> skills
+#   org/<dept>/skills/  department-only skills
 # Targets: Claude Code in WSL (~/.claude/skills), Claude Code on Windows (%USERPROFILE%\.claude\skills),
 # each project folder's .claude/skills (its own context skill), and Paperclip (40-org.sh imports skills/ and
 # project-skills/). Only skills listed in the manifest are replaced or removed; your other skills are untouched.
@@ -15,16 +16,17 @@ MANIFEST_NAME=".agent-stack-managed"
 
 # 1. role standards -> role-<key> skills (same text the Paperclip agents run with)
 rm -rf "$OUT"; mkdir -p "$OUT"
-render_file "$REPO_DIR/agents/org.json" > "$STATE_DIR/org.rendered.json"
+build_org > "$STATE_DIR/org.rendered.json"
 while read -r key title; do
-  [ -f "$REPO_DIR/agents/$key.md" ] || continue
+  rp=$(role_paths "$key") || continue
+  rel=${rp%%|*}; rel=${rel#"$REPO_DIR"/}
   mkdir -p "$OUT/role-$key"
   {
     printf -- '---\nname: role-%s\ndescription: %s standards for the %s role (how to work, quality gates, rules). Use when acting as the %s in any project or tool, or when reviewing work done in that role.\n---\n\n' \
       "$key" "${COMPANY_NAME:-Team}" "$title" "$title"
-    printf '> Generated from `agents/%s.md` in the agent-stack repo; edit the template there, not this file.\n' "$key"
+    printf '> Generated from `%s` in the agent-stack repo; edit the template there, not this file.\n' "$rel"
     printf '> Inside Paperclip the steps about issues, comments, run summaries and the board apply as written. In other tools, follow the same intent: ask the user where it says "board", and give the summary at the end of the task.\n\n'
-    render_file "$REPO_DIR/agents/$key.md" "$REPO_DIR/agents/_partials"
+    render_role "$key"
   } > "$OUT/role-$key/SKILL.md"
 done < <(jq -r '.agents[] | "\(.key) \(.title)"' "$STATE_DIR/org.rendered.json")
 
@@ -54,9 +56,10 @@ install_set() { # target-dir source-dirs...
 }
 
 GLOBAL=("$REPO_DIR"/skills/*/ "$OUT"/*/)
+for d in $(departments); do for s in "$REPO_DIR"/org/"$d"/skills/*/; do [ -d "$s" ] && GLOBAL+=("$s"); done; done
 install_set "$HOME/.claude/skills" "${GLOBAL[@]}"
 
-WINHOME=$(cd /mnt/c 2>/dev/null && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
+WINHOME=$(cd /mnt/c 2>/dev/null && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null </dev/null | tr -d '\r')
 if [ -n "$WINHOME" ] && [ "$WINHOME" != "%USERPROFILE%" ]; then
   install_set "$(wslpath -u "$WINHOME")/.claude/skills" "${GLOBAL[@]}"
 else

@@ -8,8 +8,10 @@
 . "$PSScriptRoot\lib.ps1"
 $cfg = Read-Config
 
-$org = Get-Content (Join-Path $RepoDir 'agents\org.json') -Raw | ConvertFrom-Json
-$wanted = @($org.commonSkills) + @($org.agents | ForEach-Object { $_.skills }) |
+$company = Get-Content (Join-Path $RepoDir 'org\company.json') -Raw | ConvertFrom-Json
+$deptAgents = Get-ChildItem (Join-Path $RepoDir 'org') -Filter department.json -Recurse |
+    ForEach-Object { (Get-Content $_.FullName -Raw | ConvertFrom-Json).agents }
+$wanted = @($company.commonSkills) + @($deptAgents | ForEach-Object { $_.skills }) |
     ForEach-Object { $_.Replace('{{ENGINEERING_SKILL}}', $cfg.ENGINEERING_SKILL) } | Where-Object { $_ } | Sort-Object -Unique
 # plus the vendored skills kept out of git (skills/.gitignore): they are restored here on a new machine
 $ignored = Get-Content (Join-Path $RepoDir 'skills\.gitignore') -ErrorAction SilentlyContinue |
