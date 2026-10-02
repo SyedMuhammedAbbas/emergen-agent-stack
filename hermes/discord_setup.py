@@ -9,7 +9,9 @@ import sys
 import urllib.error
 import urllib.request
 
-sys.path.insert(0, os.path.join(os.environ.get("HERMES_HOME") or os.path.join(os.environ["LOCALAPPDATA"], "hermes"), "scripts"))
+_home = os.environ.get("HERMES_HOME") or (os.path.join(os.environ["LOCALAPPDATA"], "hermes") if os.environ.get("LOCALAPPDATA")
+                                          else os.path.join(os.path.expanduser("~"), ".hermes"))  # macOS: ~/.hermes
+sys.path.insert(0, os.path.join(_home, "scripts"))
 import agent_ops  # noqa: E402
 
 CATEGORY = "Agent Ops"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Staleness watchdog (systemd timer, every 10 min). Finds tasks no agent is working on and restarts
+# Staleness watchdog (systemd timer, or launchd agent on macOS, every 10 min). Finds tasks no agent is working on and restarts
 # them through the issue itself (a board comment wakes the assignee with the issue bound to the run).
 # A task that keeps stalling is escalated to the Watchdog agent instead of being restarted again.
 #   watchdog.sh            apply fixes
@@ -17,6 +17,11 @@ MAX_PER_CYCLE=${WATCHDOG_MAX_PER_CYCLE:-6}
 RECOVERY_RE='no live execution path|cannot safely continue automatic recovery|automatically retried continuation|Adapter failed|unmanaged background task'
 
 now=$(date -u +%s); ts() { date -u -d "$1" +%s 2>/dev/null || echo 0; }
+if [ "$(uname)" = Darwin ]; then
+  # macOS: BSD date has no -d. Paperclip timestamps are UTC ISO 8601 (2026-10-03T12:34:56.789Z): drop the
+  # fraction and zone, parse with -j -f
+  ts() { local t="${1%%.*}"; t="${t%Z}"; t="${t%%+*}"; date -j -u -f '%Y-%m-%dT%H:%M:%S' "$t" +%s 2>/dev/null || echo 0; }
+fi
 say() { echo "$(date +%H:%M) $*"; }
 [ -f "$STATE" ] || echo '{}' > "$STATE"
 

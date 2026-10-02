@@ -3,6 +3,7 @@
 # System packages, systemd, linger for the agent user. Idempotent.
 source "$(dirname "$0")/lib.sh"
 load_config
+[ "$(uname)" = Darwin ] && die "Linux/WSL only. On macOS, mac/install.sh installs the Homebrew equivalents."
 [ "$(id -u)" = 0 ] || die "run as root (wsl -u root)"
 
 if ! grep -q '^systemd=true' /etc/wsl.conf 2>/dev/null; then

@@ -147,6 +147,12 @@ log "stop hook installed"
 
 # Staleness watchdog: restarts tasks nothing is working on; escalates repeat stalls to the Watchdog agent
 install -m 755 "$REPO_DIR/wsl/watchdog/watchdog.sh" "$STATE_DIR/watchdog.sh"
+if [ "$(uname)" = Darwin ]; then
+  # macOS: a launchd user agent with StartInterval instead of the systemd timer (mac/launchd.sh)
+  source "$REPO_DIR/mac/launchd.sh"
+  mac_watchdog_agent
+  log "watchdog agent loaded (every ${WATCHDOG_INTERVAL_MIN:-10} min)"
+else
 mkdir -p ~/.config/systemd/user
 cat > ~/.config/systemd/user/agent-watchdog.service <<UNIT
 [Unit]
@@ -167,6 +173,7 @@ UNIT
 systemctl --user daemon-reload
 systemctl --user enable --now agent-watchdog.timer >/dev/null
 log "watchdog timer enabled (every ${WATCHDOG_INTERVAL_MIN:-10} min)"
+fi  # end Linux/WSL (systemd)
 
 # same skills + role standards for Claude Code (WSL and Windows) and each project folder
 bash "$REPO_DIR/wsl/60-sync-skills.sh" || warn "skill sync for Claude Code failed (run wsl/60-sync-skills.sh)"
