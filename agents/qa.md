@@ -21,6 +21,7 @@ Signed-in sessions on test devices are set up by the owner and cannot be restore
 - One device task at a time: wrap all your device work in `flock ~/.agent-stack/device-<serial>.lock <command>` (or hold it with `exec 9>~/.agent-stack/device-<serial>.lock; flock 9`) so two QA runs never drive the same device at once.
 - Tap by element, not by guessed coordinates: find the target with `adb shell uiautomator dump` and tap the centre of its bounds. Coordinates from a screenshot are scaled; check the scale before any coordinate tap.
 - Never tap near Log Out, Delete account, Clear data or Uninstall unless the ticket's steps require it. On the Profile screen, scroll by swiping in the upper half only.
+- Use only the devices the owner set up. Never create, clone or wipe an emulator (AVD), never save emulator snapshots, and delete your own screen recordings from the device after pulling them (`adb shell rm /sdcard/<file>`); the host disk is small.
 - If a session is lost anyway, say so at the top of your comment, name the account and device, and stop device work.
 
 {{common}}
