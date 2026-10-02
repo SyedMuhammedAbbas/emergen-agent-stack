@@ -539,6 +539,43 @@ def _task_label(ref) -> str:
     return f"#{ref}" if isinstance(ref, int) else f"new task {ref}"
 
 
+def md_to_html(text: str) -> str:
+    """Simple Markdown (## heading, - bullet, 1. step, blank-line paragraphs) to Odoo HTML. HTML input passes through."""
+    if text.lstrip().startswith("<"):
+        return text
+    out, lst = [], None
+    def close():
+        nonlocal lst
+        if lst:
+            out.append(f"</{lst}>")
+            lst = None
+    for line in text.splitlines():
+        t = line.strip()
+        esc = lambda v: re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", html.escape(v, quote=False))
+        if not t:
+            close()
+        elif t.startswith("#"):
+            close()
+            out.append(f"<h3>{esc(t.lstrip('#').strip())}</h3>")
+        elif re.match(r"[-*] ", t):
+            if lst != "ul":
+                close(); out.append("<ul>"); lst = "ul"
+            out.append(f"<li>{esc(t[2:])}</li>")
+        elif re.match(r"\d+[.)] ", t):
+            if lst != "ol":
+                close(); out.append("<ol>"); lst = "ol"
+            out.append(f"<li>{esc(t.split(' ', 1)[1])}</li>")
+        else:
+            close()
+            out.append(f"<p>{esc(t)}</p>")
+    close()
+    return "".join(out)
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", text or ""))).strip()
+
+
 def describe_action(a: dict) -> str:
     t = a["type"]
     if t == "create_task":
@@ -547,7 +584,10 @@ def describe_action(a: dict) -> str:
         where = a.get("project") or f"project {a.get('project_id')}"
         return f"new task {a.get('ref', '')} in {where}: {a['name']} ({', '.join(e for e in extra if e) or 'defaults'})"
     if t == "update_task":
-        parts = [f"parent → {_task_label(a['parent'])}" if a.get("parent") else "",
+        parts = [f"title → \"{a['name']}\"" if a.get("name") else "",
+                 f"description → \"{_plain(a['description'])[:140]}...\"" if a.get("description") else "",
+                 "ARCHIVE" if a.get("archive") else "",
+                 f"parent → {_task_label(a['parent'])}" if a.get("parent") else "",
                  f"milestone → {a['milestone']}" if a.get("milestone") else "", "assign me" if a.get("assign_me") else "",
                  "show on project board" if a.get("show_in_project") else ""]
         return f"task {_task_label(a['task'])}: {', '.join(p for p in parts if p)}"
@@ -594,6 +634,8 @@ def cmd_propose(args, from_chat=False):
     item = {"kind": "proposal", "issue_id": f"proposal-{dt.datetime.now().strftime('%Y%m%d%H%M%S%f')}", "n": n,
             "title": spec.get("title") or "Odoo changes", "actions": actions, "posted": from_chat,
             "hours": sum(float(a.get("hours", 0)) for a in actions if a["type"] == "timesheet"), "stage": None}
+    if spec.get("only_creator"):
+        item["only_creator"] = spec["only_creator"]
     write_state("pending", pending + [item])
     print(format_proposal(item))
     if any(a["type"] == "evidence" for a in actions):
@@ -603,6 +645,8 @@ def cmd_propose(args, from_chat=False):
 def format_proposal(it: dict) -> str:
     lines = [f"📝 **{it['n']}. Proposed Odoo changes: {it['title']}** ({len(it['actions'])} change{'s' if len(it['actions']) != 1 else ''}"
              + (f", {it['hours']}h" if it["hours"] else "") + ")"]
+    if it.get("only_creator"):
+        lines.append(f"   (only tickets created by {it['only_creator']}; refused whole if any other is included)")
     lines += [f"   • {describe_action(a)}" for a in it["actions"][:25]]
     if len(it["actions"]) > 25:
         lines.append(f"   • ... and {len(it['actions']) - 25} more")
@@ -650,6 +694,15 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
     def task_project(tid):
         return odoo.call("project.task", "read", [tid], fields=["project_id"])[0]["project_id"][0]
 
+    # "only_creator": every existing ticket the proposal touches must have been created by that user.
+    # Checked before any write, so the proposal is applied whole or not at all.
+    if it.get("only_creator"):
+        ids = sorted({a["task"] for a in it["actions"] if isinstance(a.get("task"), int)})
+        for row in odoo.call("project.task", "read", ids, fields=["create_uid"]) if ids else []:
+            who = (row["create_uid"] or [0, "?"])[1]
+            if who != it["only_creator"]:
+                raise SystemExit(f"refused: task {row['id']} was created by {who}, not {it['only_creator']}; nothing was written")
+
     for a in it["actions"]:
         t = a["type"]
         if t == "create_tag":
@@ -661,7 +714,7 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
             if a.get("assign_me", True):
                 vals["user_ids"] = [(6, 0, [odoo.uid])]
             if a.get("description"):
-                vals["description"] = a["description"]
+                vals["description"] = md_to_html(a["description"])
             if a.get("parent"):
                 vals["parent_id"] = task_id(a["parent"])
                 vals["display_in_project"] = True   # sub-tasks are hidden from the board otherwise
@@ -684,6 +737,16 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
                     vals["user_ids"] = [(4, odoo.uid)]
                 if a.get("parent") or a.get("show_in_project"):
                     vals["display_in_project"] = True
+                if a.get("name"):
+                    vals["name"] = a["name"].strip()
+                if a.get("description"):
+                    vals["description"] = md_to_html(a["description"])
+                if a.get("archive"):
+                    cur = odoo.call("project.task", "read", [tid], fields=["effective_hours", "stage_id"])[0]
+                    stage = (cur["stage_id"] or [0, ""])[1]
+                    if cur.get("effective_hours") or any(k in stage for k in ("Doing", "Code Review", "Testing")):
+                        raise SystemExit(f"refusing to archive task {tid}: it has timesheet hours or is in {stage}")
+                    vals["active"] = False
                 if vals:
                     odoo.call("project.task", "write", [tid], vals)
         elif t == "timesheet":
@@ -770,7 +833,7 @@ def cmd_init(cfg):
 # ---------- read-only Odoo helpers (JSON on stdout) for agents building proposals ----------
 
 def cmd_odoo(args):
-    """odoo projects | odoo project <id> | odoo tasks <project_id> [--mine] [--open] | odoo timesheets <from> [<to>]"""
+    """odoo projects | odoo project <id> | odoo tasks <project_id> [--mine] [--open] [--full] | odoo task <id> | odoo timesheets <from> [<to>]"""
     if not args:
         raise SystemExit(cmd_odoo.__doc__)
     odoo, sub = Odoo(), args[0]
@@ -791,18 +854,37 @@ def cmd_odoo(args):
                                               fields=["id", "name", "milestone_id", "stage_id", "child_ids"], order="id desc", limit=300)
                            if t["child_ids"]],
         }
+    elif sub == "task":
+        t = odoo.call("project.task", "read", [int(args[1])],
+                      fields=["name", "x_task_number", "stage_id", "milestone_id", "parent_id", "child_ids", "create_uid",
+                              "effective_hours", "description", "display_in_project", "project_id", "active"])[0]
+        kids = odoo.call("project.task", "read", t["child_ids"], fields=["name", "stage_id"]) if t["child_ids"] else []
+        out = {"id": t["id"], "number": t.get("x_task_number"), "name": t["name"], "project": m2o(t["project_id"]),
+               "stage": m2o(t["stage_id"]), "milestone": m2o(t["milestone_id"]),
+               "parent": t["parent_id"][0] if t["parent_id"] else None, "parent_name": m2o(t["parent_id"]),
+               "creator": m2o(t["create_uid"]), "hours": t["effective_hours"], "on_board": t["display_in_project"],
+               "description": _plain(t["description"]),
+               "children": [{"id": k["id"], "name": k["name"], "stage": m2o(k["stage_id"])} for k in kids]}
     elif sub == "tasks":
         dom = [["project_id", "=", int(args[1])]]
         if "--mine" in args:
             dom.append(["user_ids", "in", [odoo.uid]])
         if "--open" in args:
             dom.append(["stage_id.fold", "=", False])
-        out = [{"id": t["id"], "name": t["name"], "stage": m2o(t["stage_id"]), "milestone": m2o(t["milestone_id"]),
-                "parent": t["parent_id"][0] if t["parent_id"] else None, "parent_name": m2o(t["parent_id"]),
-                "assignees": [u for u in t["user_ids"]], "updated": t["write_date"]}
-               for t in odoo.call("project.task", "search_read", dom,
-                                  fields=["id", "name", "stage_id", "milestone_id", "parent_id", "user_ids", "write_date"],
-                                  order="write_date desc", limit=300)]
+        full = "--full" in args
+        fields = ["id", "name", "stage_id", "milestone_id", "parent_id", "user_ids", "write_date"]
+        if full:
+            fields += ["x_task_number", "create_uid", "effective_hours", "description", "child_ids"]
+        out = []
+        for t in odoo.call("project.task", "search_read", dom, fields=fields, order="write_date desc", limit=500):
+            row = {"id": t["id"], "name": t["name"], "stage": m2o(t["stage_id"]), "milestone": m2o(t["milestone_id"]),
+                   "parent": t["parent_id"][0] if t["parent_id"] else None, "parent_name": m2o(t["parent_id"]),
+                   "assignees": [u for u in t["user_ids"]], "updated": t["write_date"]}
+            if full:
+                d = _plain(t["description"])
+                row.update({"number": t.get("x_task_number"), "creator": m2o(t["create_uid"]), "hours": t["effective_hours"],
+                            "children": len(t["child_ids"]), "description_chars": len(d), "description_start": d[:160]})
+            out.append(row)
     elif sub == "timesheets":
         cfg = load_config()
         emp = find_employee(odoo, cfg["timesheet_employee"])

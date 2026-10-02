@@ -35,7 +35,7 @@ AO='{{AGENT_OPS}}'
 6. **Match each stream to an Odoo task**, in this order:
    - a task assigned to the user whose title describes the same change (`odoo tasks <pid> --mine`), especially ones in review/QA stages that moved that day;
    - any open task in the project that clearly matches (`--open`);
-   - otherwise **create a sub-task**: `create_task` with `parent` = the main task for that area (`odoo project <pid>` lists main tasks) and `milestone` = that main task's milestone. Title in the project's style ("Area: what changed"), description with the commit hashes. `stage`: the stage matching tasks of that kind are in (e.g. "Code Review" once merged to the integration branch).
+   - otherwise **create a sub-task**: `create_task` with `parent` = the main task for that area (`odoo project <pid>` lists main tasks) and `milestone` = that main task's milestone. Title and description follow the `odoo-tickets` skill (plain "Area: what changed" title; a short Description and Done when, with the commit hashes under Technical notes). `stage`: the stage matching tasks of that kind are in (e.g. "Code Review" once merged to the integration branch).
    - For matched tasks not assigned to the user, or without a milestone, add `update_task` with `assign_me: true` and the milestone of their main task.
 7. **Hours**: split the hours to fill across streams in proportion to their commit time spans (first to last commit, plus ~30 min lead-in). Round to 0.25 h, minimum 0.25 h, and make the total exactly the hours to fill.
 8. **Proposal**: write JSON to `{{HERMES_STATE_WSL}}/proposal-timesheets-<date>.json` (the Windows path is `{{HERMES_STATE_WIN}}\proposal-timesheets-<date>.json`):

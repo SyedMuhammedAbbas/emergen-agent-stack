@@ -10,7 +10,7 @@
     {
       "key": "manager", "name": "Manager", "role": "pm", "title": "Engineering Manager", "icon": "brain",
       "model": "claude-sonnet-5", "router": false, "reportsTo": null, "budgetCents": 3000, "heartbeat": true,
-      "skills": ["delivery-gate", "writing-plans", "paperclip-converting-plans-to-tasks"]
+      "skills": ["delivery-gate", "writing-plans", "paperclip-converting-plans-to-tasks", "odoo-tickets"]
     },
     {
       "key": "cto", "name": "CTO", "role": "cto", "title": "Chief Technology Officer", "icon": "lightbulb",
@@ -46,7 +46,7 @@
       "model": "claude-sonnet-5", "router": false, "reportsTo": "manager", "budgetCents": 3000,
       "maxConcurrentRuns": 2,
       "skills": ["{{ENGINEERING_SKILL}}", "delivery-gate", "testing-strategy", "code-review",
-                 "accessibility-review", "systematic-debugging", "qa-evidence"]
+                 "accessibility-review", "systematic-debugging", "qa-evidence", "odoo-tickets"]
     },
     {
       "key": "ux", "name": "UX Reviewer", "role": "designer", "title": "UX Reviewer", "icon": "eye",
@@ -57,12 +57,12 @@
     {
       "key": "docs", "name": "Docs", "role": "general", "title": "Documentation Writer", "icon": "sparkles",
       "model": "claude-haiku-4-5", "router": false, "reportsTo": "manager", "budgetCents": 1000,
-      "skills": ["documentation-writer", "ux-copy"]
+      "skills": ["documentation-writer", "ux-copy", "odoo-tickets"]
     },
     {
       "key": "timekeeper", "name": "Timekeeper", "role": "general", "title": "Timesheets and standups", "icon": "star",
       "model": "claude-sonnet-5", "router": false, "reportsTo": "manager", "budgetCents": 1500,
-      "skills": ["daily-timesheets"],
+      "skills": ["daily-timesheets", "odoo-tickets"],
       "routine": {"title": "Daily timesheets", "cronEnv": "TIMESHEET_SCHEDULE",
                   "description": "Prepare today's timesheet proposal with the daily-timesheets skill. Date: the day this issue was created (local time)."}
     },
