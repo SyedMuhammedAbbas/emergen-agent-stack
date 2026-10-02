@@ -827,8 +827,16 @@ def cmd_standup(cfg):
         t = re.sub(r"^(\d+:\s*)+", "", name)
         t = re.sub(r"^(QA:\s*)?(Backend|Dashboard|Seller Dashboard|Mobile|App|Security|Docs|Infra|Web)\s*:\s*", "", t, flags=re.I)
         t = re.sub(r"\s*[(\[].*$", "", t).replace('"', "").strip(" .:-")
-        words = t.split()
-        return " ".join(words[:8]) if len(words) > 8 else t
+        if len(t.split()) <= 8:
+            return t
+        # prefer a natural break: "Topic: detail" -> "Topic", else the first clause
+        head = re.split(r":\s+|\s+-\s+|,\s+", t)[0]
+        if 2 <= len(head.split()) <= 8:
+            return head
+        words = t.split()[:8]
+        while words and words[-1].lower() in {"and", "or", "the", "a", "an", "of", "to", "for", "with", "in", "on", "after", "when", "is", "are", "be", "its"}:
+            words.pop()
+        return " ".join(words)
 
     def tickets(nums_):
         refs = [f"Ticket#{n}" for n in nums_]
