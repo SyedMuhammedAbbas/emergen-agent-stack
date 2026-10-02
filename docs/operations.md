@@ -31,6 +31,17 @@ cd "$env:LOCALAPPDATA\hermes\scripts"
 & $py agent_ops.py approve 1 --dry-run
 ```
 
+## Test evidence on Odoo tickets
+
+QA (and UX) use the `qa-evidence` skill for every ticket they verify, in every connected project:
+
+1. Screenshots of each reproduction step, plus a short screen recording for behaviour, saved under `<PROJECTS_ROOT>/<Category>/<Project>/_qa-evidence/Ticket#<n>/` (outside the repos).
+2. One proposal per ticket with an `evidence` action (`task`, `note`, `files`), and a `stage: Testing` action only when the ticket's own repro steps passed on the deployed build.
+3. When queued, the bridge posts the files to the approvals channel (files over ~10 MB are listed, not uploaded). Nothing reaches Odoo yet.
+4. `approve <n>`: the files become attachments on the Odoo task (`ir.attachment`) with the note in its chatter, and the stage moves. `reject <n>`: discarded.
+
+Test the flow without writing to Odoo: queue an evidence proposal, then `approve <n> --dry-run` and `reject <n>`.
+
 ## Stalled tasks (watchdog)
 
 `agent-watchdog.timer` (Ubuntu, every 10 min) runs `~/.agent-stack/watchdog.sh`. For agents that are not paused it:

@@ -22,9 +22,11 @@ Nothing is written to Odoo except by approve/edit of an item you approved in Dis
 """
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import html
 import json
+import mimetypes
 import os
 import re
 import sys
@@ -462,12 +464,74 @@ def approve(cfg, items, dry_run=False):
 #   {"type": "timesheet", "date": "2026-09-28", "task": 28034 | "t1", "hours": 2.5, "description": "..."},
 #   {"type": "stage", "task": 28034, "stage": "Testing"},
 #   {"type": "note", "task": 28034, "body": "..."},
-#   {"type": "create_tag", "name": "agent-ready"}]}
+#   {"type": "create_tag", "name": "agent-ready"},
+#   {"type": "evidence", "task": 28020, "note": "Verified on staging build 12: ...",
+#    "files": ["/mnt/d/Projects/.../_qa-evidence/Ticket#295/01-block.png", "D:\\...\\02-exit.mp4"]}]}
 # "task"/"parent" may be an Odoo task id or the "ref" of a create_task earlier in the same proposal.
 # "project" (name) or "project_id"; "milestone" by id or exact name. New tasks are assigned to the bridge's
 # Odoo user (you) unless "assign_me": false.
+# "evidence": screenshots / screen recordings proving a fix. When queued, the files are posted to the
+# approvals channel so they can be reviewed; only on approve are they attached to the Odoo task
+# (ir.attachment) with the note in its chatter.
 
-ACTION_TYPES = {"create_task", "update_task", "timesheet", "stage", "note", "create_tag"}
+ACTION_TYPES = {"create_task", "update_task", "timesheet", "stage", "note", "create_tag", "evidence"}
+EVIDENCE_MAX_BYTES = 50 * 1024 * 1024      # per file, Odoo attachment
+DISCORD_MAX_BYTES = 9_500_000             # per file, Discord bot upload (10 MB limit)
+
+
+def local_path(p: str) -> Path:
+    """Accept WSL (/mnt/d/..., /home/...) or Windows paths; return a path Windows Python can open."""
+    m = re.match(r"^/mnt/([a-zA-Z])/(.*)$", p)
+    if m:
+        return Path(f"{m.group(1).upper()}:/{m.group(2)}")
+    if p.startswith("/"):
+        return Path(r"\\wsl.localhost\Ubuntu-24.04" + p.replace("/", "\\"))
+    return Path(p)
+
+
+def approvals_channel() -> str | None:
+    """The Discord channel the agent-proposals cron job delivers to."""
+    try:
+        jobs = json.loads((HERMES_HOME / "cron" / "jobs.json").read_text(encoding="utf-8"))
+        for j in (jobs.get("jobs", []) if isinstance(jobs, dict) else jobs):
+            if j.get("name") == "agent-proposals" and str(j.get("deliver", "")).startswith("discord:"):
+                return j["deliver"].split(":", 1)[1]
+    except Exception:
+        pass
+    return None
+
+
+def post_evidence_to_discord(item: dict) -> str:
+    """Upload the evidence files of a queued proposal to the approvals channel (best effort)."""
+    token, channel = os.environ.get("DISCORD_BOT_TOKEN"), approvals_channel()
+    if not token or not channel:
+        return "evidence not posted to Discord (no bot token or approvals channel)"
+    out = []
+    for a in [a for a in item["actions"] if a["type"] == "evidence"]:
+        small = [f for f in a["files"] if local_path(f).stat().st_size <= DISCORD_MAX_BYTES]
+        big = [Path(f).name for f in a["files"] if f not in small]
+        for chunk in [small[i:i + 10] for i in range(0, len(small), 10)] or [[]]:
+            boundary = f"----agentops{os.urandom(8).hex()}"
+            text = (f"🧾 **Evidence for proposal {item['n']}** ({_task_label(a['task'])}): {a.get('note', '')[:1500]}"
+                    + (f"\nToo large for Discord, attached in Odoo only on approve: {', '.join(big)}" if big else "")
+                    + f"\nReply `approve {item['n']}` or `reject {item['n']}`.")
+            body = [f"--{boundary}\r\nContent-Disposition: form-data; name=\"payload_json\"\r\n"
+                    f"Content-Type: application/json\r\n\r\n{json.dumps({'content': text})}\r\n".encode()]
+            for i, f in enumerate(chunk):
+                p = local_path(f)
+                body.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"files[{i}]\"; filename=\"{p.name}\"\r\n"
+                            f"Content-Type: {mimetypes.guess_type(p.name)[0] or 'application/octet-stream'}\r\n\r\n".encode()
+                            + p.read_bytes() + b"\r\n")
+            body.append(f"--{boundary}--\r\n".encode())
+            req = urllib.request.Request(f"https://discord.com/api/v10/channels/{channel}/messages", data=b"".join(body),
+                                         headers={"Authorization": f"Bot {token}", "User-Agent": "agent-ops (local, 1.0)",
+                                                  "Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
+            try:
+                urllib.request.urlopen(req, timeout=120).read()
+                out.append(f"{len(chunk)} file(s) posted")
+            except Exception as e:
+                out.append(f"Discord upload failed: {e}")
+    return "; ".join(out)
 
 
 def _task_label(ref) -> str:
@@ -491,6 +555,9 @@ def describe_action(a: dict) -> str:
         return f"task {_task_label(a['task'])} stage → {a['stage']}"
     if t == "note":
         return f"note on task {_task_label(a['task'])}: {a['body'][:120]}"
+    if t == "evidence":
+        names = ", ".join(Path(f).name for f in a["files"][:6]) + (" ..." if len(a["files"]) > 6 else "")
+        return f"evidence on task {_task_label(a['task'])}: {len(a['files'])} file(s) ({names}): {a.get('note', '')[:100]}"
     return f"create Odoo tag {a['name']}"
 
 
@@ -509,6 +576,15 @@ def cmd_propose(args, from_chat=False):
                 raise SystemExit(f"unknown task ref {a[k]!r}")
         if a["type"] == "create_task" and not (a.get("project") or a.get("project_id")):
             raise SystemExit(f"create_task {a.get('name')!r} needs project or project_id")
+        if a["type"] == "evidence":
+            if not a.get("task") or not a.get("files"):
+                raise SystemExit("evidence needs task and files")
+            for f in a["files"]:
+                p = local_path(f)
+                if not p.is_file():
+                    raise SystemExit(f"evidence file not found: {f}")
+                if p.stat().st_size > EVIDENCE_MAX_BYTES:
+                    raise SystemExit(f"evidence file over {EVIDENCE_MAX_BYTES // 2**20} MB: {f} (trim the recording)")
     pending = read_state("pending", [])
     n = max([p.get("n", 0) for p in pending] + [0]) + 1
     item = {"kind": "proposal", "issue_id": f"proposal-{dt.datetime.now().strftime('%Y%m%d%H%M%S%f')}", "n": n,
@@ -516,6 +592,8 @@ def cmd_propose(args, from_chat=False):
             "hours": sum(float(a.get("hours", 0)) for a in actions if a["type"] == "timesheet"), "stage": None}
     write_state("pending", pending + [item])
     print(format_proposal(item))
+    if any(a["type"] == "evidence" for a in actions):
+        print(f"({post_evidence_to_discord(item)})")
 
 
 def format_proposal(it: dict) -> str:
@@ -620,6 +698,17 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
             if not dry_run:
                 odoo.call("project.task", "message_post", [task_id(a["task"])], body=a["body"],
                           message_type="comment", subtype_xmlid="mail.mt_note")
+        elif t == "evidence":
+            tid = task_id(a["task"])
+            if not dry_run:
+                att = []
+                for f in a["files"]:
+                    p = local_path(f)
+                    att.append(odoo.call("ir.attachment", "create", {
+                        "name": p.name, "datas": base64.b64encode(p.read_bytes()).decode(), "res_model": "project.task",
+                        "res_id": tid, "mimetype": mimetypes.guess_type(p.name)[0] or "application/octet-stream"}))
+                odoo.call("project.task", "message_post", [tid], body=a.get("note") or "Test evidence",
+                          attachment_ids=att, message_type="comment", subtype_xmlid="mail.mt_note")
         done.append(t)
     new = ", ".join(f"#{v}" for v in created.values() if v)
     return (f"✅ {it['n']}. {it['title']}: {len(done)} changes written" + (f" (new tasks {new})" if new else "")
