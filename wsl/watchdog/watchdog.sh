@@ -133,6 +133,24 @@ while read -r i; do
 done < <(jq -c --argjson act "$active" '($act|map(.id)) as $ids | .[] |
   select(.assigneeAgentId as $a | $ids | index($a)) | select(.status=="todo" or .status=="in_progress" or .status=="blocked")' <<<"$issues")
 
+# 3. disk hygiene: worktrees of finished tasks and stale Flutter temp dirs fill C: (WSL/Windows disks only grow)
+if [ $DRY = 0 ]; then
+  WT_ROOT="${WATCHDOG_WORKTREE_ROOT:-$HOME/projects}"
+  removed=0
+  for d in $(find "$WT_ROOT" -mindepth 3 -maxdepth 3 -path '*/.worktrees/*' -type d -mmin +30 2>/dev/null); do
+    ident=$(basename "$d" | grep -o -E '^[A-Z]+-[0-9]+') || continue
+    st=$(jq -r --arg x "$ident" '.[]|select(.identifier==$x)|.status' <<<"$issues")
+    case "$st" in done|cancelled) ;; *) continue ;; esac
+    gd=$(sed -n 's/^gitdir: //p' "$d/.git" 2>/dev/null); repo=${gd%%/.git/worktrees/*}
+    { [ -n "$repo" ] && git -C "$repo" worktree remove --force "$d" 2>/dev/null; } || { rm -rf "$d"; [ -n "$gd" ] && rm -rf "$gd"; }
+    removed=$((removed+1))
+  done
+  [ "$removed" -gt 0 ] && summary+=("disk: removed $removed worktree(s) of finished tasks")
+  for t in /mnt/c/Users/*/AppData/Local/Temp; do
+    find "$t" -maxdepth 1 -mindepth 1 -type d \( -name 'flutter_tools.*' -o -name 'neurax-dashboard-deploy-*' \) -mmin +120 -exec rm -rf {} + 2>/dev/null
+  done
+fi
+
 if [ ${#summary[@]} -eq 0 ]; then say "ok: nothing stale"; else
   for s in "${summary[@]}"; do say "$([ $DRY = 1 ] && echo '[dry] ')$s"; done
 fi
