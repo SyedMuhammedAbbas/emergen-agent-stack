@@ -822,15 +822,29 @@ def cmd_standup(cfg):
         if has_num and all_ids else {}
     multi = len({p for g in (completed, working, blocked) for p in g}) > 1
 
+    def brief(name):
+        """Short DSM wording: no task number, area prefix, quotes or detail; at most 8 words."""
+        t = re.sub(r"^(\d+:\s*)+", "", name)
+        t = re.sub(r"^(QA:\s*)?(Backend|Dashboard|Seller Dashboard|Mobile|App|Security|Docs|Infra|Web)\s*:\s*", "", t, flags=re.I)
+        t = re.sub(r"\s*[(\[].*$", "", t).replace('"', "").strip(" .:-")
+        words = t.split()
+        return " ".join(words[:8]) if len(words) > 8 else t
+
+    def tickets(nums_):
+        refs = [f"Ticket#{n}" for n in nums_]
+        return refs[0] if len(refs) == 1 else ", ".join(refs[:-1]) + " & " + refs[-1]
+
     def section(title, by_proj, empty):
         lines = [f"{title}: ", ""]
         if not by_proj:
             return lines + [f"* {empty}"]
         for proj, rows in by_proj.items():
+            merged = {}  # same short wording -> one bullet with all its tickets
             for tid, name in rows:
-                text = re.sub(r"\s*\(.*$", "", re.sub(r"^(\d+:\s*)+", "", name))
-                ticket = f" Ticket#{nums.get(tid) or tid}" if tid else ""
-                lines.append(f"* {proj + ' ' if multi else ''}{text}{ticket}")
+                merged.setdefault(brief(name), []).append(nums.get(tid) or tid)
+            for text, refs in merged.items():
+                refs = [r for r in refs if r]
+                lines.append(f"* {proj + ' ' if multi else ''}{text}{' ' + tickets(refs) if refs else ''}")
         return lines
 
     body = [f"{cfg.get('standup_title', 'DSM')} {_ordinal(today.day)} {MONTHS[today.month - 1]} {today.year}", "",
