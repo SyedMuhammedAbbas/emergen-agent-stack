@@ -375,6 +375,7 @@ def cmd_digest(cfg):
         if it.get("kind") == "proposal":
             it["posted"] = True
     write_state("pending", items)
+    write_state("last_n", len(items))
     write_state("last_digest", {"at": now.isoformat()})
 
     if not items:
@@ -587,7 +588,9 @@ def cmd_propose(args, from_chat=False):
                 if p.stat().st_size > EVIDENCE_MAX_BYTES:
                     raise SystemExit(f"evidence file over {EVIDENCE_MAX_BYTES // 2**20} MB: {f} (trim the recording)")
     pending = read_state("pending", [])
-    n = max([p.get("n", 0) for p in pending] + [0]) + 1
+    # never reuse a number shown in Discord since the last digest: "approve 2" must mean one thing
+    n = max([p.get("n", 0) for p in pending] + [read_state("last_n", 0)]) + 1
+    write_state("last_n", n)
     item = {"kind": "proposal", "issue_id": f"proposal-{dt.datetime.now().strftime('%Y%m%d%H%M%S%f')}", "n": n,
             "title": spec.get("title") or "Odoo changes", "actions": actions, "posted": from_chat,
             "hours": sum(float(a.get("hours", 0)) for a in actions if a["type"] == "timesheet"), "stage": None}

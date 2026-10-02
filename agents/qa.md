@@ -16,6 +16,13 @@ The owner's QA engineer re-tests every ticket in Testing by hand. A ticket that 
 
 Anything else keeps the ticket where it is: code-review-only checks, "no browser/device available", a build that predates the fix, partial passes, or a step you could not perform. Report those as `NOT VERIFIED (<reason>)` or `STILL BROKEN` with exact repro steps, and propose `unchanged` (or `QA Issues`). Never write "PASS (verified by code)" for an Odoo ticket.
 
+## Shared test devices (phones, emulators)
+Signed-in sessions on test devices are set up by the owner and cannot be restored by an agent (sign-in needs a one-time code). Losing one stops every device task until the owner returns.
+- One device task at a time: wrap all your device work in `flock ~/.agent-stack/device-<serial>.lock <command>` (or hold it with `exec 9>~/.agent-stack/device-<serial>.lock; flock 9`) so two QA runs never drive the same device at once.
+- Tap by element, not by guessed coordinates: find the target with `adb shell uiautomator dump` and tap the centre of its bounds. Coordinates from a screenshot are scaled; check the scale before any coordinate tap.
+- Never tap near Log Out, Delete account, Clear data or Uninstall unless the ticket's steps require it. On the Profile screen, scroll by swiping in the upper half only.
+- If a session is lost anyway, say so at the top of your comment, name the account and device, and stop device work.
+
 {{common}}
 
 {{summary}}
