@@ -1,8 +1,10 @@
 # Agent stack
 
-An AI engineering team that runs on one Windows machine and starts on its own at logon:
+An AI factory that runs on one laptop (Windows + WSL today; macOS in [beta](docs/setup-mac.md)) and starts on its own at logon. Every teammate runs their own copy; this repo keeps everyone's agents, standards and skills identical ([team setup](docs/team-setup.md)).
 
-- **Paperclip** runs 10 Claude Code agents as an org: Manager, CTO, Frontend, Backend, DevOps and SecOps Engineers, QA, UX Reviewer, Docs, and an Estimator for new projects.
+**Quickest setup:** clone the repo, open Claude Code in it and say "Set up the AI factory from this repo". Claude follows [CLAUDE.md](CLAUDE.md).
+
+- **Paperclip** runs Claude Code agents as an org, grouped in [departments](docs/departments.md): **Engineering** (Manager, CTO, Frontend, Backend, DevOps and SecOps Engineers, QA, UX Reviewer, Docs, Estimator), **Operations** (Timekeeper, Watchdog) and a **Branding** template (Brand Lead, Social Media Writer, Video Producer) you can switch on.
 - **jev-router** picks Haiku, Sonnet or Opus per turn for the three engineers whose task difficulty varies.
 - **Optional: Hermes bridge.** If you run [Hermes](https://github.com/NousResearch/hermes-agent) with Odoo and Discord, tickets tagged in Odoo become agent tasks, agent questions arrive in Discord, and a daily digest asks you to approve work before timesheets are written back to Odoo.
 
@@ -62,7 +64,7 @@ Copy-Item config.example.env config.env
 notepad config.env
 ```
 
-Required: `WSL_USER`, `COMPANY_NAME`, `STACK`, `ENGINEERING_SKILL`, `SKILLS_SOURCE`, `PROJECTS_ROOT`, `PROJECT_CATEGORIES`. For the bridge also `DISCORD_CHANNEL_ID` (Discord Developer Mode, right-click the channel, "Copy Channel ID") and `TIMESHEET_EMPLOYEE` (exact Odoo employee name).
+Teammates start from `examples/team.env` instead (company values filled in, personal ones blank). Required: `WSL_USER`, `COMPANY_NAME`, `STACK`, `ENGINEERING_SKILL`, `PROJECTS_ROOT`, `PROJECT_CATEGORIES`, `DEPARTMENTS`. For the bridge also `DISCORD_CHANNEL_ID` (Discord Developer Mode, right-click the channel, "Copy Channel ID") and `TIMESHEET_EMPLOYEE` (exact Odoo employee name).
 
 **2. Collect third-party skills**
 
@@ -70,7 +72,7 @@ Required: `WSL_USER`, `COMPANY_NAME`, `STACK`, `ENGINEERING_SKILL`, `SKILLS_SOUR
 .\windows\collect-skills.ps1
 ```
 
-Copies the skills listed in `skills/THIRD_PARTY.md` from your Claude installs into `SKILLS_SOURCE`. Install any it reports missing and run it again, or continue without them.
+Restores the licensed skills that are not in git (listed in `skills/THIRD_PARTY.md`) from your Claude installs into `skills/`. Install any it reports missing and run it again, or continue without them.
 
 **3. Install**
 
@@ -91,7 +93,7 @@ For `jev-router setup`, paste a TypeSafe key, or leave it empty and paste an Ope
 
 **4. Check**
 
-Open http://localhost:3100: the org chart shows all 10 agents. With the bridge, tag a small Odoo task `agent-ready`; within 15 minutes it appears in Paperclip and a notice is posted in Discord.
+Open http://localhost:3100: the org chart shows the agents of every department in `DEPARTMENTS`. With the bridge, tag a small Odoo task `agent-ready`; within 15 minutes it appears in Paperclip and a notice is posted in Discord.
 
 ## Working on a project
 
@@ -173,7 +175,8 @@ This repo is the single source of skills and role standards. The same files driv
 | What | Where | Installed to |
 |---|---|---|
 | General skills (ours + vendored) | `skills/` | Paperclip, Claude Code in WSL and on Windows (`~/.claude/skills`) |
-| Role standards | `agents/*.md` + `agents/_partials/` | Paperclip agent prompts, and `role-<key>` skills in Claude Code (generated, never edited by hand) |
+| Role standards | `org/<dept>/*.md` + `org/_partials/`, `org/<dept>/_partials/` | Paperclip agent prompts, and `role-<key>` skills in Claude Code (generated, never edited by hand) |
+| Department-only skills | `org/<dept>/skills/` | Same as general skills, for the departments in `DEPARTMENTS` |
 | Project context | `project-skills/<name>/`, mapped in `project-skills/projects.json` | Paperclip (all agents via `EXTRA_SKILLS`) and that project's folder `.claude/skills` |
 
 `wsl/60-sync-skills.sh` does the install (run by `40-org.sh`, or on its own after editing a skill; `--dry-run` to preview). It only replaces or removes skills it installed (tracked in `.agent-stack-managed`), never your other skills.
@@ -185,6 +188,7 @@ This repo is the single source of skills and role standards. The same files driv
 | `qa-evidence` | Screenshots/recordings proving an Odoo ticket is fixed, approved before they reach Odoo |
 | `project-estimation` | Requirements to project folder and estimation workbook |
 | `daily-timesheets` | End-of-day timesheet proposal |
+| `odoo-tickets` | How tickets are written (titles, descriptions a non-engineer can follow, structure) and how a messy Odoo project is cleaned up through approved proposals |
 | your engineering standards (`ENGINEERING_SKILL`) | Stack standards and checklists every engineer follows. `emergen-engineering` is an example |
 
 Third-party skills, their sources and licenses: `skills/THIRD_PARTY.md`. Proprietary or unlicensed ones stay out of git (`skills/.gitignore`) and are restored on a new machine by `windows/collect-skills.ps1`.
@@ -197,8 +201,9 @@ Skills in `skills/` can use `{{COMPANY_NAME}}`, `{{STACK}}`, `{{ENGINEERING_SKIL
 
 | Change | Edit | Apply |
 |---|---|---|
-| Models, budgets, skills per agent, add or remove agents | `agents/org.json` | `.\install.ps1 -OnlyOrg` |
-| An agent's instructions | `agents/<key>.md` (shared parts in `agents/_partials/`) | `.\install.ps1 -OnlyOrg` |
+| Models, budgets, skills per agent, add or remove agents | `org/<dept>/department.json` | `.\install.ps1 -OnlyOrg` |
+| An agent's instructions | `org/<dept>/<key>.md` (shared parts in `org/_partials/` and `org/<dept>/_partials/`) | `.\install.ps1 -OnlyOrg` |
+| Add or switch on a department | `org/<dept>/`, `DEPARTMENTS` in config.env ([docs/departments.md](docs/departments.md)) | `.\install.ps1 -OnlyOrg` |
 | Your skills | `skills/<name>/SKILL.md` | `.\install.ps1 -OnlyOrg` |
 | Third-party skills | update them in Claude, then `.\windows\collect-skills.ps1` | `.\install.ps1 -OnlyOrg` |
 | Bridge logic | `hermes/` | `.\windows\hermes-bridge.ps1` |
@@ -208,19 +213,25 @@ Edits made in the Paperclip UI to agent instructions or skills are overwritten b
 ## Repository layout
 
 ```
-install.ps1                 entry point
+CLAUDE.md                   setup playbook Claude follows on a new laptop
+install.ps1                 entry point (Windows)
 connect-project.ps1         attach repos to a Paperclip project (+ optional Odoo link)
 config.example.env          settings template -> config.env (git-ignored)
-examples/emergen.env        a complete real configuration
-agents/org.json             agent roster: role, model, router, budget, skills, reporting line
-agents/<key>.md             instruction templates; {{common}} {{summary}} {{eng-rules}} from agents/_partials/
-skills/                     this repo's skills + THIRD_PARTY.md
+examples/team.env           company values filled in, personal ones blank (teammates start here)
+examples/emergen.env        the owner's complete configuration
+org/company.json            skills every agent gets, router settings
+org/<dept>/department.json  a department's agents: role, model, router, budget, skills, reporting line
+org/<dept>/<key>.md         instruction templates; {{common}} {{summary}} from org/_partials/, {{eng-rules}} etc. from org/<dept>/_partials/
+skills/                     shared skills + THIRD_PARTY.md
+project-skills/             one context skill per project + projects.json (project folder mapping)
 wsl/10-base.sh              (root) apt packages, systemd, linger
 wsl/20-tools.sh             Node 24, Claude Code, Paperclip, jev-router, Playwright Chromium
 wsl/25-browser-deps.sh      (root) Chromium system libraries
 wsl/30-services.sh          logins check, Paperclip service + PATH drop-in, jev-router
 wsl/40-org.sh               company, skills, agents, instructions, skill assignment
 wsl/50-connect-project.sh   clone repos, Paperclip project, workspaces, worktree policy
+wsl/60-sync-skills.sh       skills + role-<key> skills into Claude Code and project folders
+wsl/watchdog/, wsl/hooks/   stalled-task watchdog, stop hook for agents
 windows/wsl-host.ps1        .wslconfig + WSL keepalive task
 windows/hermes-bridge.ps1   bridge scripts, Hermes skill, config, Odoo tags, cron jobs, gateway watchdog
 windows/collect-skills.ps1  gathers third-party skills into SKILLS_SOURCE
@@ -229,6 +240,8 @@ windows/discord-channels.ps1  Agent Ops category + channels, ids into config.env
 hermes/agent_ops.py         Odoo <-> Paperclip bridge (intake, digest, standup, propose, approve/edit/reject, odoo lookups, answer, newproject)
 hermes/agent_job.py         cron entry point, installed once per job as agent_<command>.py
 docs/operations.md          health checks, troubleshooting, backups
+docs/team-setup.md          shared vs personal, handing the setup to Claude, keeping in sync
+docs/departments.md         turning on, adding and changing departments
 ```
 
 Not in git: `config.env`, WSL `~/.agent-stack/` (Paperclip ids), Paperclip's database in `~/.paperclip`, jev-router keys in `~/.config/jev-router/env`, Hermes secrets in `%LOCALAPPDATA%\hermes\.env`.

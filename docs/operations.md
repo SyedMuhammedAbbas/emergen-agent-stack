@@ -65,6 +65,10 @@ A Claude Code Stop hook (`~/.claude/hooks/wait-for-background.sh`) also keeps an
 
 **Ubuntu says "Read-only file system" / Input/output error.** C: ran out of space and WSL protected its disk. Free space on C: (Disk Cleanup, `npm cache clean --force`, `pnpm store prune`, `pip cache purge`, `docker system prune`), then `wsl --shutdown` and reopen Ubuntu. The journal replays and the disk comes back writable. The Hermes gateway may have died at the same time; the watchdog restarts it within 15 minutes.
 
+**WSL stops answering (`Wsl/Service/0x8007274c`, Paperclip times out) and `vmmemWSL` sits at the memory cap.** WSL ran out of memory: parallel agents plus Docker Desktop share `WSL_MEMORY`. 8 GB froze it with a few agents running; 12 GB is the tested value on a 32 GB laptop. Set `WSL_MEMORY` in config.env (and `memory=` in `%UserProfile%\.wslconfig`), then `wsl --shutdown`.
+
+**C: keeps filling up.** Check the big files first: `pagefile.sys` (cap it at 16 GB in Virtual memory settings), `hiberfil.sys` (`powercfg /h off`), the WSL and Docker disks (`ext4.vhdx`, `docker_data.vhdx`, they never shrink on their own; compact them with `diskpart` while WSL is shut down) and emulator images in `%UserProfile%\.android\avd`.
+
 **Agent run fails with `Command not found in PATH: "claude"`.** The Paperclip service can't see `~/.local/bin`. `wsl/30-services.sh` writes `~/.config/systemd/user/paperclipai.service.d/path.conf`; re-run `.\install.ps1`. If Node was upgraded, the drop-in's Node path changes too, so re-run after `nvm install`.
 
 **Agent run fails immediately with an auth error.** Claude Code isn't logged in inside WSL: run `claude` in Ubuntu and log in.
