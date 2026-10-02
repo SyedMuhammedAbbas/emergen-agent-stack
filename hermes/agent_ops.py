@@ -547,7 +547,8 @@ def describe_action(a: dict) -> str:
         return f"new task {a.get('ref', '')} in {where}: {a['name']} ({', '.join(e for e in extra if e) or 'defaults'})"
     if t == "update_task":
         parts = [f"parent → {_task_label(a['parent'])}" if a.get("parent") else "",
-                 f"milestone → {a['milestone']}" if a.get("milestone") else "", "assign me" if a.get("assign_me") else ""]
+                 f"milestone → {a['milestone']}" if a.get("milestone") else "", "assign me" if a.get("assign_me") else "",
+                 "show on project board" if a.get("show_in_project") else ""]
         return f"task {_task_label(a['task'])}: {', '.join(p for p in parts if p)}"
     if t == "timesheet":
         return f"{a['date']}  {a['hours']}h on {_task_label(a['task'])}: {a.get('description', '')}"
@@ -660,6 +661,7 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
                 vals["description"] = a["description"]
             if a.get("parent"):
                 vals["parent_id"] = task_id(a["parent"])
+                vals["display_in_project"] = True   # sub-tasks are hidden from the board otherwise
             if a.get("milestone"):
                 vals["milestone_id"] = milestone_id(a["milestone"], pid)
             if a.get("stage"):
@@ -677,6 +679,8 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
                     vals["milestone_id"] = milestone_id(a["milestone"], task_project(tid))
                 if a.get("assign_me"):
                     vals["user_ids"] = [(4, odoo.uid)]
+                if a.get("parent") or a.get("show_in_project"):
+                    vals["display_in_project"] = True
                 if vals:
                     odoo.call("project.task", "write", [tid], vals)
         elif t == "timesheet":
