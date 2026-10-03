@@ -939,6 +939,18 @@ def cmd_diskguard(cfg):
                 pc.resume(aid)
             except Exception as e:  # an agent deleted meanwhile must not block the rest
                 print(f"could not resume {aid}: {e}", file=sys.stderr)
+        # confirm with Paperclip: a resume that timed out (WSL busy) must be retried next run, not forgotten
+        try:
+            still = {a["id"] for a in pc.agents() if a.get("status") == "paused"}
+            failed = [aid for aid in st["paused"] if aid in still]
+        except Exception as e:
+            print(f"could not re-check agents: {e}", file=sys.stderr)
+            failed = list(st["paused"])
+        if failed:
+            st["paused"] = failed
+            write_state("diskguard", st)
+            print(f"⚠️ Disk guard: {drive} has {free:.1f} GB free but {len(failed)} agents did not resume; retrying next run.")
+            return
         restarted = 0
         for rec in st.get("issues", []):
             try:
