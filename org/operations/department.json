@@ -22,7 +22,8 @@
         "title": "Daily timesheets",
         "cronEnv": "TIMESHEET_SCHEDULE",
         "description": "Prepare today's timesheet proposal with the daily-timesheets skill. Date: the day this issue was created (local time)."
-      }
+      },
+      "maxConcurrentRuns": 1
     },
     {
       "key": "watchdog",
@@ -41,7 +42,8 @@
         "title": "Stall sweep",
         "cronEnv": "WATCHDOG_SWEEP_SCHEDULE",
         "description": "Scheduled stall sweep: follow the 'Scheduled sweep' section of your instructions. Check every open task and get stuck work moving."
-      }
+      },
+      "maxConcurrentRuns": 1
     }
   ]
 }

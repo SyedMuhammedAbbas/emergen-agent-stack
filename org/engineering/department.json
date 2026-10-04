@@ -20,7 +20,8 @@
         "writing-plans",
         "paperclip-converting-plans-to-tasks",
         "odoo-tickets"
-      ]
+      ],
+      "maxConcurrentRuns": 1
     },
     {
       "key": "cto",
@@ -39,7 +40,8 @@
         "testing-strategy",
         "writing-plans",
         "test-integrity"
-      ]
+      ],
+      "maxConcurrentRuns": 1
     },
     {
       "key": "frontend",
@@ -65,7 +67,8 @@
         "systematic-debugging",
         "receiving-code-review",
         "test-integrity"
-      ]
+      ],
+      "maxConcurrentRuns": 2
     },
     {
       "key": "backend",
@@ -85,7 +88,8 @@
         "systematic-debugging",
         "receiving-code-review",
         "test-integrity"
-      ]
+      ],
+      "maxConcurrentRuns": 2
     },
     {
       "key": "devops",
@@ -105,7 +109,8 @@
         "systematic-debugging",
         "receiving-code-review",
         "test-integrity"
-      ]
+      ],
+      "maxConcurrentRuns": 2
     },
     {
       "key": "secops",
@@ -124,7 +129,8 @@
         "systematic-debugging",
         "receiving-code-review",
         "test-integrity"
-      ]
+      ],
+      "maxConcurrentRuns": 1
     },
     {
       "key": "qa",
@@ -184,7 +190,8 @@
         "documentation-writer",
         "ux-copy",
         "odoo-tickets"
-      ]
+      ],
+      "maxConcurrentRuns": 1
     },
     {
       "key": "estimator",
@@ -202,7 +209,8 @@
         "{{ENGINEERING_SKILL}}",
         "system-design",
         "writing-plans"
-      ]
+      ],
+      "maxConcurrentRuns": 1
     }
   ]
 }

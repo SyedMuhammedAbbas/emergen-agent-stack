@@ -6,19 +6,53 @@
   "head": "brand-lead",
   "agents": [
     {
-      "key": "brand-lead", "name": "Brand Lead", "role": "pm", "title": "Head of Brand and Content", "icon": "star",
-      "model": "claude-sonnet-5", "router": false, "reportsTo": null, "budgetCents": 1500,
-      "skills": ["brand", "ux-copy", "writing-plans"]
+      "key": "brand-lead",
+      "name": "Brand Lead",
+      "role": "pm",
+      "title": "Head of Brand and Content",
+      "icon": "star",
+      "model": "claude-sonnet-5",
+      "router": false,
+      "reportsTo": null,
+      "budgetCents": 1500,
+      "skills": [
+        "brand",
+        "ux-copy",
+        "writing-plans"
+      ],
+      "maxConcurrentRuns": 1
     },
     {
-      "key": "social-writer", "name": "Social Media Writer", "role": "general", "title": "Social Media Writer", "icon": "sparkles",
-      "model": "claude-sonnet-5", "router": false, "reportsTo": "brand-lead", "budgetCents": 1000,
-      "skills": ["brand", "ux-copy", "banner-design"]
+      "key": "social-writer",
+      "name": "Social Media Writer",
+      "role": "general",
+      "title": "Social Media Writer",
+      "icon": "sparkles",
+      "model": "claude-sonnet-5",
+      "router": false,
+      "reportsTo": "brand-lead",
+      "budgetCents": 1000,
+      "skills": [
+        "brand",
+        "ux-copy",
+        "banner-design"
+      ],
+      "maxConcurrentRuns": 1
     },
     {
-      "key": "video-producer", "name": "Video Producer", "role": "general", "title": "Video Producer", "icon": "rocket",
-      "model": "claude-sonnet-5", "router": false, "reportsTo": "brand-lead", "budgetCents": 1500,
-      "skills": ["brand"]
+      "key": "video-producer",
+      "name": "Video Producer",
+      "role": "general",
+      "title": "Video Producer",
+      "icon": "rocket",
+      "model": "claude-sonnet-5",
+      "router": false,
+      "reportsTo": "brand-lead",
+      "budgetCents": 1500,
+      "skills": [
+        "brand"
+      ],
+      "maxConcurrentRuns": 1
     }
   ]
 }

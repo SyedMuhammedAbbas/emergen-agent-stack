@@ -65,6 +65,8 @@ A Claude Code Stop hook (`~/.claude/hooks/wait-for-background.sh`) also keeps an
 
 **Ubuntu says "Read-only file system" / Input/output error.** C: ran out of space and WSL protected its disk. Free space on C: (Disk Cleanup, `npm cache clean --force`, `pnpm store prune`, `pip cache purge`, `docker system prune`), then `wsl --shutdown` and reopen Ubuntu. The journal replays and the disk comes back writable. The Hermes gateway may have died at the same time; the watchdog restarts it within 15 minutes.
 
+**Everything freezes after a burst of tasks.** Paperclip's default is 20 parallel runs per agent: an audit that files 25 tasks for one agent starts 20 Claude workers at once and fills WSL's memory. Every agent's `maxConcurrentRuns` is set in `org/<dept>/department.json` (2 for engineers, QA and UX, 1 for the rest) and applied by `40-org.sh`. To stop a burst already running: pause the agent, wait until its runs stop, resume it, and set its interrupted tasks back to `todo`; they then run two at a time.
+
 **WSL stops answering (`Wsl/Service/0x8007274c`, Paperclip times out) and `vmmemWSL` sits at the memory cap.** WSL ran out of memory: parallel agents plus Docker Desktop share `WSL_MEMORY`. 8 GB froze it with a few agents running; 12 GB is the tested value on a 32 GB laptop. Set `WSL_MEMORY` in config.env (and `memory=` in `%UserProfile%\.wslconfig`), then `wsl --shutdown`.
 
 **C: keeps filling up.** Check the big files first: `pagefile.sys` (cap it at 16 GB in Virtual memory settings), `hiberfil.sys` (`powercfg /h off`), the WSL and Docker disks (`ext4.vhdx`, `docker_data.vhdx`, they never shrink on their own; compact them with `diskpart` while WSL is shut down) and emulator images in `%UserProfile%\.android\avd`.
