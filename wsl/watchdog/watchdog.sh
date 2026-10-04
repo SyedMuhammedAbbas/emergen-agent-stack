@@ -175,10 +175,15 @@ done < <(jq -c --argjson act "$active" '($act|map(.id)) as $ids | .[] |
 if [ $DRY = 0 ]; then
   WT_ROOT="${WATCHDOG_WORKTREE_ROOT:-$HOME/projects}"
   removed=0
+  # Paperclip lets a new task reuse an earlier task's worktree ("reuse_existing"): never remove a folder
+  # that any open task's execution workspace still points at, whatever task name the folder carries
+  in_use=$(jq -r '.[] | select(.status!="done" and .status!="cancelled") | .executionWorkspaceId // empty' <<<"$issues" | sort -u |
+    while read -r ew; do curl -sf -m 20 "$API/execution-workspaces/$ew" | jq -r '.cwd // .path // empty'; done)
   for d in $(find "$WT_ROOT" -mindepth 3 -maxdepth 3 -path '*/.worktrees/*' -type d -mmin +30 2>/dev/null); do
     ident=$(basename "$d" | grep -o -E '^[A-Z]+-[0-9]+') || continue
     st=$(jq -r --arg x "$ident" '.[]|select(.identifier==$x)|.status' <<<"$issues")
     case "$st" in done|cancelled) ;; *) continue ;; esac
+    grep -q -x -F "$d" <<<"$in_use" && continue
     gd=$(sed -n 's/^gitdir: //p' "$d/.git" 2>/dev/null); repo=${gd%%/.git/worktrees/*}
     { [ -n "$repo" ] && git -C "$repo" worktree remove --force "$d" 2>/dev/null; } || { rm -rf "$d"; [ -n "$gd" ] && rm -rf "$gd"; }
     removed=$((removed+1))
