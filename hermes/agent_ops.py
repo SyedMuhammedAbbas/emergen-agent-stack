@@ -925,10 +925,15 @@ def cmd_diskguard(cfg):
         ids = {a["id"] for a in agents}
         active = [{"id": i["id"], "identifier": i.get("identifier"), "assignee": i.get("assigneeAgentId")}
                   for i in pc.issues() if i.get("assigneeAgentId") in ids and i.get("status") in ("todo", "in_progress")]
-        for a in agents:
-            pc.pause(a["id"])
+        # save the list BEFORE pausing: pausing takes ~20 s per agent and the cron job can be cut off midway;
+        # a list saved afterwards was lost that way, and the agents were never resumed
         write_state("diskguard", {"paused": [a["id"] for a in agents], "issues": active,
                                   "at": now.isoformat(timespec="minutes"), "alerted": now.isoformat()})
+        for a in agents:
+            try:
+                pc.pause(a["id"])
+            except Exception as e:
+                print(f"could not pause {a['id']}: {e}", file=sys.stderr)
         print(f"🛑 **Disk guard: {drive} has {free:.1f} GB free** (limit {low:g} GB). Paused {len(agents)} agents "
               f"({len(active)} tasks waiting) {why}.\n"
               f"Free space on {drive} ({cleanup}). Agents resume automatically "

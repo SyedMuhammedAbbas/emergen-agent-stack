@@ -36,7 +36,12 @@
       "budgetCents": 1500,
       "skills": [
         "systematic-debugging"
-      ]
+      ],
+      "routine": {
+        "title": "Stall sweep",
+        "cronEnv": "WATCHDOG_SWEEP_SCHEDULE",
+        "description": "Scheduled stall sweep: follow the 'Scheduled sweep' section of your instructions. Check every open task and get stuck work moving."
+      }
     }
   ]
 }

@@ -14,7 +14,8 @@ STALE_MIN=${WATCHDOG_STALE_MIN:-15}      # in_progress/todo untouched this long 
 MAX_FIXES=${WATCHDOG_MAX_FIXES:-3}       # restarts per task within WINDOW_H before escalating
 WINDOW_H=${WATCHDOG_WINDOW_H:-6}
 MAX_PER_CYCLE=${WATCHDOG_MAX_PER_CYCLE:-6}
-RECOVERY_RE='no live execution path|cannot safely continue automatic recovery|automatically retried continuation|Adapter failed|unmanaged background task'
+RECOVERY_RE='no live execution path|cannot safely continue automatic recovery|automatically retried continuation|Adapter failed|unmanaged background task|issue workspace failed validation|execution-review participant|review stage still has no completed decision|interrupted by the disk guard'
+REVIEW_STALE_MIN=${WATCHDOG_REVIEW_STALE_MIN:-180}   # in_review untouched this long, no live run, no open sub-task
 
 now=$(date -u +%s); ts() { date -u -d "$1" +%s 2>/dev/null || echo 0; }
 if [ "$(uname)" = Darwin ]; then
@@ -54,6 +55,29 @@ done < <(jq -c '.[] | select(.status=="error" and .adapterType=="claude_local")'
 # active agents: not paused/terminated, run by Claude (skip the Hermes gateway)
 active=$(jq -c '[.[] | select(.status!="paused" and .status!="terminated" and .adapterType=="claude_local") | {id, name, cap: (.runtimeConfig.heartbeat.maxConcurrentRuns // 1)}]' <<<"$agents")
 
+escalate() { # issue-json reason title-suffix: hand the task to the Watchdog agent, once until that escalation is closed
+  local i="$1" why="$2" what="$3" id ident hist last_runs desc eid
+  [ -n "$WD" ] || return 0
+  id=$(jq -r .id <<<"$i"); ident=$(jq -r .identifier <<<"$i")
+  hist=$(jq -c --arg id "$id" '.[$id] // {fixes:[], escalated:null}' "$STATE")
+  if [ "$(jq -r '.escalated // empty' <<<"$hist")" != "" ]; then
+    case "$(jq -r --arg e "$(jq -r .escalated <<<"$hist")" '.[]|select(.id==$e)|.status' <<<"$issues")" in
+      done|cancelled) ;; *) return 0 ;; esac   # Watchdog agent is on it
+    # closed recently (e.g. the Watchdog agent found it is legitimately waiting on the board): do not re-escalate yet
+    [ $(( now - $(jq -r '.escalatedAt // 0' <<<"$hist") )) -lt $(( ${WATCHDOG_ESCALATION_COOLDOWN_H:-12} * 3600 )) ] && return 0
+  fi
+  summary+=("$ident: $why -> escalated to Watchdog agent")
+  [ $DRY = 1 ] && return 0
+  last_runs=$(jq -r --arg id "$id" '[.[] | select(.contextSnapshot.issueId==$id)] | sort_by(.createdAt) | .[-4:][] |
+    "- run `\(.id)` \(.status) exit=\(.exitCode) liveness=\(.livenessState // "-"): \(.livenessReason // .error // "-")"' <<<"$runs")
+  desc=$(printf 'Watchdog escalation for [%s](/EME/issues/%s): %s.\n\nRecent runs on it:\n%s\n\nRun logs: `~/.paperclip/instances/default/data/run-logs/%s/<agentId>/<runId>.ndjson`.\n\nFollow your instructions: find the cause, fix what can be fixed in Paperclip, restart the task with precise instructions, or ask the board.' \
+    "$ident" "$ident" "$why" "$last_runs" "$CID")
+  eid=$(curl -sf -X POST "$API/companies/$CID/issues" -H 'content-type: application/json' -d "$(jq -nc \
+    --arg t "Watchdog: $ident $what" --arg d "$desc" --arg a "$WD" --arg p "$(jq -r '.projectId // empty' <<<"$i")" \
+    '{title:$t, description:$d, status:"todo", priority:"high", assigneeAgentId:$a} + (if $p=="" then {} else {projectId:$p} end)')" | jq -r .id)
+  jq --arg id "$id" --arg e "$eid" --argjson now "$now" '.[$id] = ((.[$id] // {fixes:[]}) + {escalated:$e, escalatedAt:$now})' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+}
+
 restart() { # issue-json reason
   local i="$1" why="$2" id ident hist recent
   id=$(jq -r .id <<<"$i"); ident=$(jq -r .identifier <<<"$i")
@@ -65,17 +89,7 @@ restart() { # issue-json reason
     case "$esc_status" in done|cancelled) ;; *) return 0 ;; esac   # Watchdog agent is on it
   fi
   if [ "$recent" -ge "$MAX_FIXES" ] && [ -n "$WD" ]; then
-    summary+=("$ident: stalled $recent times in ${WINDOW_H}h -> escalated to Watchdog agent")
-    [ $DRY = 1 ] && return 0
-    local last_runs desc eid
-    last_runs=$(jq -r --arg id "$id" '[.[] | select(.contextSnapshot.issueId==$id)] | sort_by(.createdAt) | .[-4:][] |
-      "- run `\(.id)` \(.status) exit=\(.exitCode) liveness=\(.livenessState // "-"): \(.livenessReason // .error // "-")"' <<<"$runs")
-    desc=$(printf 'Watchdog escalation for [%s](/EME/issues/%s): it stalled %s times in %sh; the last reason seen: %s.\n\nRecent runs on it:\n%s\n\nRun logs: `~/.paperclip/instances/default/data/run-logs/%s/<agentId>/<runId>.ndjson`.\n\nFollow your instructions: find the cause, fix what can be fixed in Paperclip, restart the task with precise instructions, or ask the board.' \
-      "$ident" "$ident" "$recent" "$WINDOW_H" "$why" "$last_runs" "$CID")
-    eid=$(curl -sf -X POST "$API/companies/$CID/issues" -H 'content-type: application/json' -d "$(jq -nc \
-      --arg t "Watchdog: $ident keeps stalling" --arg d "$desc" --arg a "$WD" --arg p "$(jq -r '.projectId // empty' <<<"$i")" \
-      '{title:$t, description:$d, status:"todo", priority:"high", assigneeAgentId:$a} + (if $p=="" then {} else {projectId:$p} end)')" | jq -r .id)
-    jq --arg id "$id" --arg e "$eid" '.[$id] = ((.[$id] // {fixes:[]}) + {escalated:$e})' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+    escalate "$i" "it stalled $recent times in ${WINDOW_H}h; the last reason seen: $why" "keeps stalling"
     return 0
   fi
   # A task whose last run crashed can be held by Paperclip ("execution_reconciliation_required":
@@ -131,12 +145,31 @@ while read -r i; do
     blocked)
       last=$(curl -sf "$API/issues/$id/comments" | jq -r 'sort_by(.createdAt) | last | .body // ""')
       grep -q -E '^\*\*Question for board' <<<"$last" && continue
-      grep -q -E "$RECOVERY_RE" <<<"$last" && why="blocked by Paperclip run recovery, not by a question" ;;
+      grep -q -E "$RECOVERY_RE" <<<"$last" && why="blocked by Paperclip run recovery, not by a question"
+      # blocked on other issues that are all finished (Paperclip's own auto-resume does not always fire)
+      if [ -z "$why" ] && grep -q -i -E 'blocker|blocked on|blocked by|waiting on' <<<"$last"; then
+        refs=$(grep -o -E '\b[A-Z]+-[0-9]+\b' <<<"$last" | sort -u | grep -v -x "$(jq -r .identifier <<<"$i")" || true)
+        if [ -n "$refs" ]; then
+          open=0
+          for r in $refs; do
+            case "$(jq -r --arg x "$r" '.[]|select(.identifier==$x)|.status' <<<"$issues")" in done|cancelled) ;; *) open=1 ;; esac
+          done
+          [ $open = 0 ] && why="blocked on $(tr '\n' ' ' <<<"$refs")which are all finished"
+        fi
+      fi ;;
+    in_review)
+      # a review nobody is doing: escalate (a restart would undo the review state)
+      [ "$age" -ge "$REVIEW_STALE_MIN" ] || continue
+      jq -e --arg id "$id" 'any(.[]; .parentId == $id and .status != "done" and .status != "cancelled")' <<<"$issues" >/dev/null && continue
+      last=$(curl -sf "$API/issues/$id/comments" | jq -r 'sort_by(.createdAt) | last | .body // ""')
+      grep -q -E '^\*\*Question for board' <<<"$last" && continue
+      escalate "$i" "in review for ${age} min with no reviewer run and no open review sub-task" "review is stuck"
+      fixed=$((fixed+1)); continue ;;
   esac
   [ -n "$why" ] || continue
   restart "$i" "$why"; fixed=$((fixed+1))
 done < <(jq -c --argjson act "$active" '($act|map(.id)) as $ids | .[] |
-  select(.assigneeAgentId as $a | $ids | index($a)) | select(.status=="todo" or .status=="in_progress" or .status=="blocked")' <<<"$issues")
+  select(.assigneeAgentId as $a | $ids | index($a)) | select(.status=="todo" or .status=="in_progress" or .status=="blocked" or .status=="in_review")' <<<"$issues")
 
 # 3. disk hygiene: worktrees of finished tasks and stale Flutter temp dirs fill C: (WSL/Windows disks only grow)
 if [ $DRY = 0 ]; then
