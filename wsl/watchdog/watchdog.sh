@@ -97,8 +97,10 @@ restart() { # issue-json reason
   local wake reason
   wake=$(curl -s -m 60 -X POST "$API/agents/$(jq -r .assigneeAgentId <<<"$i")/wakeup" -H 'content-type: application/json' \
     -d "$(jq -nc --arg id "$id" '{source:"assignment", triggerDetail:"system", reason:"issue_assigned", payload:{issueId:$id, taskId:$id, taskKey:$id}}')")
-  reason=$(jq -r '.reason // empty' <<<"$wake" 2>/dev/null)
-  if [ "$reason" = execution_reconciliation_required ]; then
+  reason=$(jq -r '[.reason, .cause, .executionBlocker.cause] | map(select(. != null)) | join(" ")' <<<"$wake" 2>/dev/null)
+  # wakes come back "skipped" with this cause in either spelling (older Paperclip runs use the legacy one)
+  if grep -q -E 'execution_reconciliation_required|legacy_execution_requires_reconciliation' <<<"$reason" \
+     || jq -e '(.executionBlocker.cause // "") | test("reconciliation")' <<<"$i" >/dev/null 2>&1; then
     if jq -e --arg id "$id" 'any(.[]; .parentId == $id and .status != "done" and .status != "cancelled")' <<<"$issues" >/dev/null; then
       summary+=("$ident: held by Paperclip run reconciliation and has open sub-tasks -> left for the Watchdog agent")
       return 0
