@@ -244,6 +244,7 @@ hermes/agent_job.py         cron entry point, installed once per job as agent_<c
 docs/operations.md          health checks, troubleshooting, backups
 docs/team-setup.md          shared vs personal, handing the setup to Claude, keeping in sync
 docs/discord-messages.md    how every Discord message is written (all projects, bridge, Hermes and agents)
+docs/owner-rules.md         every standing owner instruction and the file that teaches it to the agents
 docs/departments.md         turning on, adding and changing departments
 ```
 

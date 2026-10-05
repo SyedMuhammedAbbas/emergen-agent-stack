@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import hashlib
 import html
 import json
 import mimetypes
@@ -506,6 +507,7 @@ def approve(cfg, items, dry_run=False):
 
 ACTION_TYPES = {"create_task", "update_task", "timesheet", "stage", "note", "create_tag", "evidence"}
 EVIDENCE_MAX_BYTES = 50 * 1024 * 1024      # per file, Odoo attachment
+EVIDENCE_MAX_FILES = 8                   # proof is a small, chosen set (qa-evidence skill)
 DISCORD_MAX_BYTES = 9_500_000             # per file, Discord bot upload (10 MB limit)
 
 
@@ -685,12 +687,23 @@ def cmd_propose(args, from_chat=False):
         if a["type"] == "evidence":
             if not a.get("task") or not a.get("files"):
                 raise SystemExit("evidence needs task and files")
+            if len(a["files"]) > EVIDENCE_MAX_FILES:
+                raise SystemExit(f"evidence has {len(a['files'])} files; at most {EVIDENCE_MAX_FILES}. "
+                                 "Keep only the shots that prove the ticket's steps (qa-evidence skill).")
+            if len((a.get("note") or "").strip()) < 20:
+                raise SystemExit("evidence needs a note saying what each file proves (qa-evidence skill)")
+            seen = {}
             for f in a["files"]:
                 p = local_path(f)
                 if not p.is_file():
                     raise SystemExit(f"evidence file not found: {f}")
                 if p.stat().st_size > EVIDENCE_MAX_BYTES:
                     raise SystemExit(f"evidence file over {EVIDENCE_MAX_BYTES // 2**20} MB: {f} (trim the recording)")
+                digest = hashlib.sha256(p.read_bytes()).hexdigest()
+                if digest in seen:
+                    raise SystemExit(f"duplicate evidence: {Path(f).name} is the same file as {Path(seen[digest]).name}. "
+                                     "Queue each shot once.")
+                seen[digest] = f
     pending = read_state("pending", [])
     # one evidence proposal per ticket: a second one (e.g. from a retried run) would attach the same proof twice
     queued = {a.get("task"): p["n"] for p in pending if p.get("kind") == "proposal"

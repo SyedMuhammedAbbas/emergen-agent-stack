@@ -34,6 +34,23 @@ API-only tickets: save the request and response of each step as a `.txt` or `.js
 
 Keep each file small: recordings 15-60 s at 4 Mbit/s (Discord shows files up to about 10 MB; larger ones are attached in Odoo only). Never capture secrets, real customer data, card numbers other than Stripe test cards, or OTP codes on screen.
 
+## What counts as proof (read before you queue anything)
+
+The owner and the client open these files to see that the work is done correctly. A wrong, blocked or repeated image is worse than none: it makes the ticket look unverified. The proof set is small, correct and specific to this ticket.
+
+1. **Plan the shots from the ticket, before capturing.** List the ticket's steps and its Expected Result. Each file must prove one of them; name it after that step (`01-addresses-list-has-back.png`, `02-back-returns-to-profile.png`). Usually 2-5 screenshots, plus at most one short recording when the fix is about motion or timing. Never more than 8 files.
+2. **Capture in a working folder, then choose.** Capture into `_qa-evidence/Ticket#<n>/work/`. Copy only the chosen files into `_qa-evidence/Ticket#<n>/final/` and queue only `final/`. Clear `final/` before a new attempt so old files never mix in.
+3. **Look at every file before it goes into `final/`.** Open each image (and scrub each video) and check:
+   - it shows the screen the step names, on the build you tested;
+   - nothing covers the content: no permission or system dialog, keyboard, lock screen, notification shade, loading spinner, black or white frame, error toast from something else;
+   - it is about **this** ticket, not another ticket you tested in the same session;
+   - it adds something the other files do not show.
+   If a file fails any check, delete it. If the screen was blocked, remove the blocker (dismiss the dialog, wait for the load, unlock) and retake that one shot. Never take screenshots in a loop hoping one is good.
+4. **No duplicates.** Identical or near-identical files (same screen, same state) are never queued twice. The bridge refuses a proposal whose files repeat.
+5. **One evidence proposal per ticket, once.** If an earlier proposal for the ticket is still waiting, do not queue another (the bridge refuses it); mention its number instead. If the earlier proof was wrong, say so in your summary and ask the board to reject it first.
+6. **The note explains the files.** One sentence on the build and what was done, then one line per file: `01: <what it proves>`. The owner must be able to understand each file without opening the ticket.
+7. **A failed or blocked check is not proof.** If you could not reach the screen or the result, queue nothing for that ticket: report NOT VERIFIED with the reason.
+
 ## Queuing the evidence
 
 Write a proposal file and queue it with the bridge (Windows Python called from WSL; quote the Windows path):
@@ -48,9 +65,9 @@ AO='{{AGENT_OPS}}'
 {"title": "Evidence: Ticket#295 Block Seller verified on staging build 12",
  "actions": [
   {"type": "evidence", "task": 28020,
-   "note": "Verified on staging build 12 (app a07cd18): Block Seller asks to confirm, blocks, and takes the buyer out of the live stream. Steps 1-3 of the ticket followed as written.",
-   "files": ["{{PROJECTS_ROOT}}/Emergen/NeuraX/_qa-evidence/Ticket#295/01-confirm-dialog.png",
-             "{{PROJECTS_ROOT}}/Emergen/NeuraX/_qa-evidence/Ticket#295/03-flow.mp4"]},
+   "note": "Verified on staging build 12 (app a07cd18), ticket steps 1-3 as written.\n01: Block Seller asks to confirm before blocking.\n02: recording: after confirming, the buyer leaves the live stream and the seller's show is gone from Home.",
+   "files": ["{{PROJECTS_ROOT}}/Emergen/NeuraX/_qa-evidence/Ticket#295/final/01-confirm-dialog.png",
+             "{{PROJECTS_ROOT}}/Emergen/NeuraX/_qa-evidence/Ticket#295/final/02-leaves-stream.mp4"]},
   {"type": "stage", "task": 28020, "stage": "Testing"}
  ]}
 ```

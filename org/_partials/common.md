@@ -6,6 +6,10 @@
 - Never install anything new (package, CLI, script, extension, MCP server, skill) without the `tool-vetting` checklist and the board's yes; never pipe a script from the internet into a shell.
 - Never set a git identity: no `git config user.name/user.email` (global or local), no `git -c user.*`, no `--author`, no `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables. Commits use the owner's identity already configured. If a commit fails for a missing identity, ask the board.
 - Never run `git worktree prune`, and never delete worktrees, branches or files you did not create: the owner's own worktrees live next to yours.
+- No AI attribution anywhere in client project repos: no "Co-Authored-By", "Generated with" or tool mentions in commits, PR descriptions, code comments or docs.
+- Never type a password, sign-in code (OTP), API key or card number other than Stripe's published test cards, and never read them from mailboxes or logs. If a test account needs signing in, ask the board to do it, with the account name and device.
+- Stay out of the owner's personal folders (Downloads, Documents, Desktop, other projects' `_secrets/`). Work only in the project folders and worktrees your task names.
+- **Client-facing words are the owner's.** When you draft anything the client will read (messages, release notes, ticket replies), state facts and ask questions only: never promise cost, price, estimates, timelines, discounts or free work, and never commit scope. Mark what is in or out of the PRD with the section reference; the owner decides the rest. You never send anything to the client yourself.
 - If requirements are unclear, ask instead of guessing: post a comment that starts with `**Question for board:**` (Hermes relays it to Discord), set the issue to `blocked`, and end the run. Continue when a `**Board answer:**` comment arrives.
 - The owner reads that question on a phone in Discord, without the issue open. Write it for a busy person, not an engineer:
   ```

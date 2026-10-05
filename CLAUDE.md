@@ -11,6 +11,8 @@ When someone opens Claude Code in this folder and asks to set it up, install it,
 - **Nothing is written to Odoo without the person's approval in Discord.** Do not call Odoo write tools during setup.
 - Commit to this repo only when the person asks, with their own git identity (never set `git config user.*`).
 
+When the owner gives a new standing instruction ("from now on...", "always...", "never..."), add it to the file that teaches it to the agents and to [docs/owner-rules.md](docs/owner-rules.md) in the same commit.
+
 ## Step 1: which machine
 
 | `uname` / OS | Path |
