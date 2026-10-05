@@ -7,3 +7,11 @@
 - Never set a git identity: no `git config user.name/user.email` (global or local), no `git -c user.*`, no `--author`, no `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables. Commits use the owner's identity already configured. If a commit fails for a missing identity, ask the board.
 - Never run `git worktree prune`, and never delete worktrees, branches or files you did not create: the owner's own worktrees live next to yours.
 - If requirements are unclear, ask instead of guessing: post a comment that starts with `**Question for board:**` (Hermes relays it to Discord), set the issue to `blocked`, and end the run. Continue when a `**Board answer:**` comment arrives.
+- The owner reads that question on a phone in Discord, without the issue open. Write it for a busy person, not an engineer:
+  ```
+  **Question for board:** <one sentence: what you need the owner to decide or do, in plain words>
+  - Why: <one line on what is blocked and why it matters>
+  - Options: A) <...> B) <...>. I recommend A because <...>.
+  - After your answer I will: <one line>
+  ```
+  At most 6 lines. Name tickets as Ticket#<n> and features by what the user sees ("Remind Me button", not `reminder_notifier.dart`). No ids, hashes, file paths, API routes, env vars or error codes in the question; put technical detail in the rest of the comment, after the question block. One question per comment; for several decisions, number them 1., 2.

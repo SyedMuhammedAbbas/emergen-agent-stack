@@ -230,10 +230,34 @@ def cmd_intake(cfg):
         print("**Agent intake**\n" + "\n".join(lines))
 
 
+def format_question(issue: dict, body: str, agent: str) -> str:
+    """Only the question block, in plain words: who asks, about what, the question, how to answer."""
+    start = body.lower().find("question for board")
+    q = body[start:]
+    # the block ends at the next heading, rule or run summary
+    m = re.search(r"\n(#{1,4} |---|\*\*Run summary|### Run summary)", q)
+    q = q[:m.start()] if m else q
+    q = re.sub(r"(?i)^\**question for board:?\**:?\s*", "", q.strip())
+    q = re.sub(r"\*\*|__|`", "", q)
+    q = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", q)          # markdown links -> their text
+    q = re.sub(r"\n{3,}", "\n\n", q).strip()
+    if len(q) > 700:
+        q = q[:700].rsplit(" ", 1)[0] + " …"
+    title = re.sub(r"^\[?ODOO-\d+\]?\s*", "", issue.get("title") or "").strip()
+    ident = issue.get("identifier")
+    return (f"❓ **{agent} needs a decision** on {ident}: {title[:90]}\n"
+            f"{q}\n"
+            f"↩️ To answer, reply: `answer {ident} <your answer>`")
+
+
 def relay_questions(pc: "Paperclip") -> list[str]:
     """Surface agent comments starting with 'Question for board' that weren't relayed yet."""
     relayed = set(read_state("relayed_questions", []))
     out = []
+    try:
+        names = {a["id"]: a.get("name") for a in pc.agents()}
+    except Exception:
+        names = {}
     for issue in pc.issues():
         if issue.get("status") in ("done", "cancelled"):
             continue
@@ -242,9 +266,7 @@ def relay_questions(pc: "Paperclip") -> list[str]:
             if c["id"] in relayed or c.get("authorType") != "agent" or "question for board" not in body.lower():
                 continue
             relayed.add(c["id"])
-            q = re.sub(r"\*\*|__", "", body).strip()[:900]
-            out.append(f"❓ **{issue.get('identifier')}** {issue.get('title')}\n{q}\n"
-                       f"Reply here with `answer {issue.get('identifier')} <your answer>`")
+            out.append(format_question(issue, body, names.get(c.get("authorAgentId"), "An agent")))
     write_state("relayed_questions", sorted(relayed))
     return out
 
