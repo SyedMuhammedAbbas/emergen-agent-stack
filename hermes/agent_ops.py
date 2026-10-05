@@ -635,6 +635,13 @@ def cmd_propose(args, from_chat=False):
                 if p.stat().st_size > EVIDENCE_MAX_BYTES:
                     raise SystemExit(f"evidence file over {EVIDENCE_MAX_BYTES // 2**20} MB: {f} (trim the recording)")
     pending = read_state("pending", [])
+    # one evidence proposal per ticket: a second one (e.g. from a retried run) would attach the same proof twice
+    queued = {a.get("task"): p["n"] for p in pending if p.get("kind") == "proposal"
+              for a in p.get("actions", []) if a.get("type") == "evidence"}
+    dup = [(a["task"], queued[a["task"]]) for a in actions if a["type"] == "evidence" and a.get("task") in queued]
+    if dup:
+        raise SystemExit("evidence for task " + ", ".join(f"{t} is already queued as proposal {n}" for t, n in dup)
+                         + ". Do not queue it again; mention that proposal number in your summary.")
     # never reuse a number shown in Discord since the last digest: "approve 2" must mean one thing
     n = max([p.get("n", 0) for p in pending] + [read_state("last_n", 0)]) + 1
     write_state("last_n", n)
