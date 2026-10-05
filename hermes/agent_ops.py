@@ -225,9 +225,9 @@ def cmd_intake(cfg):
                     body["parentId"] = parent["id"]
             issue = pc.create_issue(body)
             issues.append(issue)
-            lines.append(f"• {code} {t['name']} → Paperclip {issue.get('identifier') or issue.get('id')}")
+            lines.append(f"• {t['name']} → agent task {issue.get('identifier') or issue.get('id')}")
     if lines:  # empty stdout = silent run
-        print("**Agent intake**\n" + "\n".join(lines))
+        print("📥 **New work picked up from Odoo**\n" + "\n".join(lines))
 
 
 def format_question(issue: dict, body: str, agent: str) -> str:
@@ -288,7 +288,7 @@ def cmd_answer(cfg, args, dry_run):
         pc.comment(issue["id"], f"**Board answer:** {text}")
         if issue.get("status") == "blocked":
             pc.update_issue(issue["id"], {"status": "todo"})
-    print(f"{'(dry run) ' if dry_run else ''}Answered {issue.get('identifier')}: {text}")
+    print(f"{'(dry run) ' if dry_run else ''}✅ Sent your answer to {issue.get('identifier')}; the agent continues from it.")
 
 
 def cmd_newproject(cfg, args, dry_run):
@@ -405,18 +405,20 @@ def cmd_digest(cfg):
     write_state("last_digest", {"at": now.isoformat()})
 
     if not items:
-        print("**Agent digest**: no agent work to approve today.")
+        print("📋 **Daily digest:** nothing from the agents to approve today.")
         return
     date = now.astimezone().strftime("%a %d %b")  # local time
-    out = [f"**Agent digest, {date}** ({len(items)} item{'s' if len(items) != 1 else ''})"]
+    out = [f"📋 **Daily digest, {date}**: {len(items)} item{'s' if len(items) != 1 else ''} to approve"]
+    digest_labels = ticket_labels([it.get("odoo_task_id") for it in items if it.get("kind") != "proposal"])
     for it in items:
         if it.get("kind") == "proposal":  # renumbered above, so always re-show it
             out.append("\n" + format_proposal(it))
             continue
-        out.append(f"**{it['n']}.** #{it['odoo_task_id']} {short_title(it['title'])}: {item_update(it)} · "
-                   f"{it['hours']}h · stage → {it['stage'] or 'unchanged'}")
-    out.append("\nReply: `approve 1,2` · `edit 2 hours=1.5 stage=Testing` · `reject 3 <reason>`. "
-               "Nothing is written to Odoo until you approve.")
+        label = digest_labels.get(str(it["odoo_task_id"])) or short_title(it["title"])
+        stage = f", move to {it['stage']}" if it.get("stage") else ""
+        out.append(f"**{it['n']}.** {label}: {item_update(it)} ({it['hours']} h{stage})")
+    out.append("\nReply `approve 1,2`, `edit 2 hours=1.5 stage=Testing` or `reject 3 <reason>`. "
+               "Nothing changes in Odoo until you approve.")
     print("\n".join(out))
 
 
@@ -475,7 +477,8 @@ def approve(cfg, items, dry_run=False):
                       message_type="comment", subtype_xmlid="mail.mt_note")
         actions.append("chatter note")
         done.add(it["issue_id"])
-        lines.append(f"✅ {it['n']}. ODOO-{it['odoo_task_id']}: {', '.join(actions)}")
+        label = ticket_labels([it["odoo_task_id"]]).get(str(it["odoo_task_id"])) or short_title(it["title"])
+        lines.append(f"✅ {it['n']}. {label}: {', '.join(actions)}")
     if not dry_run:
         drop_pending(done)
     print(("(dry run) " if dry_run else "") + "\n".join(lines))
@@ -564,8 +567,31 @@ def post_evidence_to_discord(item: dict) -> str:
     return "; ".join(out)
 
 
+_LABELS: dict = {}   # Odoo task id -> "Ticket#N: short title", filled per message being formatted
+
+
 def _task_label(ref) -> str:
-    return f"#{ref}" if isinstance(ref, int) else f"new task {ref}"
+    if isinstance(ref, int):
+        return _LABELS.get(str(ref)) or _LABELS.get(ref) or f"Odoo task {ref}"
+    return f"the new ticket ({ref})"
+
+
+def ticket_labels(ids) -> dict:
+    """Odoo task ids -> 'Ticket#N: short title' for messages people read; {} if Odoo is unreachable."""
+    ids = sorted({i for i in ids if isinstance(i, int)})
+    if not ids:
+        return {}
+    try:
+        rows = Odoo().call("project.task", "read", ids, fields=["name", "x_task_number"])
+    except Exception:
+        return {}
+    out = {}
+    for r in rows:
+        title = re.sub(r"^\d+:\s*", "", r.get("name") or "").strip()
+        title = title if len(title) <= 60 else title[:57].rsplit(" ", 1)[0] + "..."
+        num = r.get("x_task_number")
+        out[str(r["id"])] = f"Ticket#{num} ({title})" if num else f"“{title}”"
+    return out
 
 
 def md_to_html(text: str) -> str:
@@ -606,30 +632,39 @@ def _plain(text: str) -> str:
 
 
 def describe_action(a: dict) -> str:
+    """One plain sentence per change, as the owner reads it in Discord."""
     t = a["type"]
     if t == "create_task":
+        where = a.get("project") or "the project"
         extra = [f"under {_task_label(a['parent'])}" if a.get("parent") else "",
-                 f"milestone {a['milestone']}" if a.get("milestone") else "", a.get("stage") or ""]
-        where = a.get("project") or f"project {a.get('project_id')}"
-        return f"new task {a.get('ref', '')} in {where}: {a['name']} ({', '.join(e for e in extra if e) or 'defaults'})"
+                 f"in stage {a['stage']}" if a.get("stage") else ""]
+        return f"Create a ticket in {where}: “{a['name']}”" + (f" ({', '.join(e for e in extra if e)})" if any(extra) else "")
     if t == "update_task":
-        parts = [f"title → \"{a['name']}\"" if a.get("name") else "",
-                 f"description → \"{_plain(a['description'])[:140]}...\"" if a.get("description") else "",
-                 "ARCHIVE" if a.get("archive") else "",
-                 f"parent → {_task_label(a['parent'])}" if a.get("parent") else "",
-                 f"milestone → {a['milestone']}" if a.get("milestone") else "", "assign me" if a.get("assign_me") else "",
-                 "show on project board" if a.get("show_in_project") else ""]
-        return f"task {_task_label(a['task'])}: {', '.join(p for p in parts if p)}"
+        parts = [f"rename to “{a['name']}”" if a.get("name") else "",
+                 "rewrite the description" if a.get("description") else "",
+                 "archive it (duplicate)" if a.get("archive") else "",
+                 f"move it under {_task_label(a['parent'])}" if a.get("parent") else "",
+                 f"set milestone {a['milestone']}" if a.get("milestone") else "",
+                 "assign it to you" if a.get("assign_me") else "",
+                 "show it on the project board" if a.get("show_in_project") else ""]
+        return f"{_task_label(a['task'])}: " + ", ".join(p for p in parts if p)
     if t == "timesheet":
-        return f"{a['date']}  {a['hours']}h on {_task_label(a['task'])}: {a.get('description', '')}"
+        day = dt.date.fromisoformat(a["date"]).strftime("%a %d %b") if a.get("date") else ""
+        return f"Log {a['hours']} h on {day} to {_task_label(a['task'])}" + (f" — {a['description']}" if a.get("description") else "")
     if t == "stage":
-        return f"task {_task_label(a['task'])} stage → {a['stage']}"
+        return f"Move {_task_label(a['task'])} to {a['stage']}"
     if t == "note":
-        return f"note on task {_task_label(a['task'])}: {a['body'][:120]}"
+        body = _plain(a["body"])
+        return f"Add a note to {_task_label(a['task'])}: “{body[:140]}{'...' if len(body) > 140 else ''}”"
     if t == "evidence":
-        names = ", ".join(Path(f).name for f in a["files"][:6]) + (" ..." if len(a["files"]) > 6 else "")
-        return f"evidence on task {_task_label(a['task'])}: {len(a['files'])} file(s) ({names}): {a.get('note', '')[:100]}"
-    return f"create Odoo tag {a['name']}"
+        vids = sum(Path(f).suffix.lower() in (".mp4", ".webm", ".mov") for f in a["files"])
+        other = len(a["files"]) - vids
+        what = " and ".join(x for x in (f"{other} screenshot{'s' if other != 1 else ''}" if other else "",
+                                        f"{vids} video{'s' if vids != 1 else ''}" if vids else "") if x)
+        note = _plain(a.get("note", ""))
+        return (f"Attach {what} to {_task_label(a['task'])} as test proof"
+                + (f": {note[:160]}{'...' if len(note) > 160 else ''}" if note else ""))
+    return f"Create the Odoo tag “{a['name']}”"
 
 
 def cmd_propose(args, from_chat=False):
@@ -672,6 +707,7 @@ def cmd_propose(args, from_chat=False):
             "hours": sum(float(a.get("hours", 0)) for a in actions if a["type"] == "timesheet"), "stage": None}
     if spec.get("only_creator"):
         item["only_creator"] = spec["only_creator"]
+    item["labels"] = ticket_labels([a.get(k) for a in actions for k in ("task", "parent")])
     write_state("pending", pending + [item])
     print(format_proposal(item))
     if any(a["type"] == "evidence" for a in actions):
@@ -679,14 +715,16 @@ def cmd_propose(args, from_chat=False):
 
 
 def format_proposal(it: dict) -> str:
-    lines = [f"📝 **{it['n']}. Proposed Odoo changes: {it['title']}** ({len(it['actions'])} change{'s' if len(it['actions']) != 1 else ''}"
-             + (f", {it['hours']}h" if it["hours"] else "") + ")"]
+    _LABELS.clear(); _LABELS.update(it.get("labels") or {})
+    count = len(it["actions"])
+    lines = [f"📝 **Approval {it['n']}: {it['title']}**"
+             + (f" ({count} changes" + (f", {it['hours']} h" if it["hours"] else "") + ")" if count > 1 else "")]
     if it.get("only_creator"):
-        lines.append(f"   (only tickets created by {it['only_creator']}; refused whole if any other is included)")
-    lines += [f"   • {describe_action(a)}" for a in it["actions"][:25]]
-    if len(it["actions"]) > 25:
-        lines.append(f"   • ... and {len(it['actions']) - 25} more")
-    lines.append(f"Reply `approve {it['n']}` to write these to Odoo, or `reject {it['n']}`.")
+        lines.append(f"Only tickets created by {it['only_creator']}.")
+    lines += [f"• {describe_action(a)}" for a in it["actions"][:25]]
+    if count > 25:
+        lines.append(f"• ...and {count - 25} more")
+    lines.append(f"Reply `approve {it['n']}` to apply this in Odoo, or `reject {it['n']}` to drop it.")
     return "\n".join(lines)
 
 
@@ -817,8 +855,8 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
                           attachment_ids=att, message_type="comment", subtype_xmlid="mail.mt_note")
         done.append(t)
     new = ", ".join(f"#{v}" for v in created.values() if v)
-    return (f"✅ {it['n']}. {it['title']}: {len(done)} changes written" + (f" (new tasks {new})" if new else "")
-            if not dry_run else f"{it['n']}. {it['title']}: {len(done)} changes would be written")
+    return (f"✅ Approval {it['n']} applied in Odoo: {it['title']}" + (f" (new tickets: {new})" if new else "")
+            if not dry_run else f"(dry run) Approval {it['n']}: {it['title']}, {len(done)} changes would be applied")
 
 
 def cmd_edit(cfg, args, dry_run):
@@ -840,12 +878,12 @@ def cmd_reject(cfg, args, dry_run):
     reason = " ".join(args[1:]) or "Rejected in the daily digest."
     for it in items:
         if it.get("kind") == "proposal":
-            print(f"{'(dry run) ' if dry_run else ''}❌ {it['n']}. proposal '{it['title']}' discarded, nothing written")
+            print(f"{'(dry run) ' if dry_run else ''}❌ Approval {it['n']} dropped: {it['title']}. Nothing was changed in Odoo.")
             continue
         if not dry_run:
             pc.comment(it["issue_id"], f"**Board rejected this in the daily digest:** {reason}")
             pc.update_issue(it["issue_id"], {"status": "todo", "assigneeAgentId": cfg["manager_agent_id"]})
-        print(f"{'(dry run) ' if dry_run else ''}❌ {it['n']}. {it['identifier']} sent back to Manager: {reason}")
+        print(f"{'(dry run) ' if dry_run else ''}❌ {it['n']}. Sent {it['identifier']} back to the Manager: {reason}")
     if not dry_run:
         drop_pending({it["issue_id"] for it in items})
 
@@ -975,10 +1013,10 @@ def cmd_diskguard(cfg):
                 pc.pause(a["id"])
             except Exception as e:
                 print(f"could not pause {a['id']}: {e}", file=sys.stderr)
-        print(f"🛑 **Disk guard: {drive} has {free:.1f} GB free** (limit {low:g} GB). Paused {len(agents)} agents "
-              f"({len(active)} tasks waiting) {why}.\n"
-              f"Free space on {drive} ({cleanup}). Agents resume automatically "
-              f"above {high:g} GB, and their interrupted tasks restart.")
+        print(f"🛑 **Agents paused: low disk space.** {drive} has only {free:.1f} GB free (they need {low:g} GB). "
+              f"{len(agents)} agents are paused {why}; {len(active)} tasks are waiting.\n"
+              f"To do: free up space on {drive} ({cleanup}). They restart on their own above {high:g} GB "
+              f"and pick up their tasks again.")
     elif st.get("paused") and free >= high:
         for aid in st["paused"]:
             try:
@@ -995,7 +1033,8 @@ def cmd_diskguard(cfg):
         if failed:
             st["paused"] = failed
             write_state("diskguard", st)
-            print(f"⚠️ Disk guard: {drive} has {free:.1f} GB free but {len(failed)} agents did not resume; retrying next run.")
+            print(f"⚠️ {drive} has enough space again ({free:.1f} GB), but {len(failed)} agents did not restart yet. "
+                  f"Retrying in a few minutes; nothing to do for now.")
             return
         restarted = 0
         for rec in st.get("issues", []):
@@ -1009,14 +1048,16 @@ def cmd_diskguard(cfg):
                 pc.update_issue(rec["id"], {"status": "todo", "assigneeAgentId": rec["assignee"]})
                 restarted += 1
         write_state("diskguard", {})
-        print(f"✅ **Disk guard: {drive} has {free:.1f} GB free.** Resumed {len(st['paused'])} agents and restarted {restarted} interrupted tasks.")
+        print(f"✅ **Agents are working again**: {drive} has {free:.1f} GB free. "
+              f"{len(st['paused'])} agents resumed" + (f", {restarted} interrupted tasks restarted." if restarted else "."))
     elif st.get("paused"):
         last = dt.datetime.fromisoformat(st.get("alerted", st["at"]))
         if now - last >= dt.timedelta(hours=2):  # gentle reminder, not every 5 minutes
             st["alerted"] = now.isoformat()
             write_state("diskguard", st)
-            print(f"🛑 Disk guard: agents still paused since {st['at']}; {drive} has {free:.1f} GB free, "
-                  f"needs {high:g} GB to resume.")
+            when = dt.datetime.fromisoformat(st["at"]).strftime("%a %H:%M")
+            print(f"🛑 **Agents are still paused** (since {when}): {drive} has {free:.1f} GB free and they need "
+                  f"{high:g} GB to restart. Free up space ({cleanup}).")
 
 
 # ---------- daily standup (read-only) ----------

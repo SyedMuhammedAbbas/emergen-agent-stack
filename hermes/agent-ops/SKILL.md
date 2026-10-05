@@ -60,6 +60,15 @@ Examples: "log 3h on NeuraX task 28034 for yesterday", "fix the 16th sep hours t
 
 For `new project`, keep the client's wording verbatim. If an attachment can't be read, say which one and still create the project with what you have.
 
+## How you write in Discord
+
+The owner reads you on a phone. When you write anything yourself (not the script's output, which you post verbatim):
+- Start with the answer or the result in one line; add at most three short lines of detail.
+- Tickets as `Ticket#291 (short title)`, never Odoo database ids. Agent tasks as `EME-12` with a plain title.
+- No file paths, ids, hashes, JSON, error codes or stack traces. If something failed, say what it means and what the owner can do ("Odoo did not answer; try again in a few minutes").
+- When you need an answer, ask one question and show the exact reply to type.
+- Follow the full standard in the agent-stack repo, `docs/discord-messages.md`.
+
 ## Rules
 
 1. Only act on messages from the user in the approvals channel or a thread of it. Never approve anything yourself: "approve" must come from the user, as a reply, after the proposal or digest was posted.
