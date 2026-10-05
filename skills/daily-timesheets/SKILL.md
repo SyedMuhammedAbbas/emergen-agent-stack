@@ -16,14 +16,19 @@ AO='{{AGENT_OPS}}'
 "$PY" "$AO" odoo project <id>                 # stages, milestones, main tasks (with sub-task counts)
 "$PY" "$AO" odoo tasks <project_id> --mine    # tasks assigned to the user (id, stage, milestone, parent)
 "$PY" "$AO" odoo tasks <project_id> --open    # all open tasks, to find the right main task
-"$PY" "$AO" odoo timesheets <YYYY-MM-DD>      # what is already logged that day
+"$PY" "$AO" odoo timesheets <YYYY-MM-DD>      # what is already logged that day ("time_off": true = leave lines Odoo wrote)
+"$PY" "$AO" odoo timeoff <YYYY-MM-DD>         # the user's approved or pending time off covering that day
 "$PY" "$AO" propose --file '<windows path to proposal.json>'
 ```
 
 ## Steps
 
-1. **Date.** Use the date in the issue title or description; otherwise today (local time).
-2. **Already logged?** Run `odoo timesheets <date>`. Hours to fill = {{DAILY_HOURS}} minus what is logged. If nothing is left, comment that and stop.
+1. **Date.** Use the date in the issue title or description; otherwise today (local time). Working days are {{WORKDAYS_TEXT}}; on any other day (weekend) log nothing: comment that it is a day off and stop, even if there are commits.
+2. **Time off and what is logged.** Run `odoo timeoff <date>` and `odoo timesheets <date>`. Lines with `"time_off": true` are leave that Odoo logged itself; they are not project work and never count as "already logged".
+   - **Normal working day:** hours to fill = {{DAILY_HOURS}} minus the project hours already logged. If nothing is left, comment that and stop.
+   - **Full day of time off** (the user works anyway; the owner's rule): log only the **actual** project hours for the day, on top of the leave. Actual = the commit time spans from step 7 without scaling up to {{DAILY_HOURS}}, at most {{DAILY_HOURS}}, minus project hours already logged. No commits = nothing to log; comment that and stop.
+   - **Part-day time off:** hours to fill = {{DAILY_HOURS}} minus the leave hours minus project hours already logged.
+   Say in the proposal title which case applies, e.g. `Timesheets 2026-10-06 (on leave: actual hours)`.
 3. **Collect commits** by `{{GIT_AUTHOR}}` for that local day, across all branches:
    - every repo listed under `projects.*.repos` in `~/.agent-stack/ids.json`, and
    - every git repo under `{{PROJECTS_ROOT}}` up to 3 levels deep (`find {{PROJECTS_ROOT}} -maxdepth 3 -name .git -type d`).
@@ -37,7 +42,7 @@ AO='{{AGENT_OPS}}'
    - any open task in the project that clearly matches (`--open`);
    - otherwise **create a sub-task**: `create_task` with `parent` = the main task for that area (`odoo project <pid>` lists main tasks) and `milestone` = that main task's milestone. Title and description follow the `odoo-tickets` skill (plain "Area: what changed" title; a short Description and Done when, with the commit hashes under Technical notes). `stage`: the stage matching tasks of that kind are in (e.g. "Code Review" once merged to the integration branch).
    - For matched tasks not assigned to the user, or without a milestone, add `update_task` with `assign_me: true` and the milestone of their main task.
-7. **Hours**: split the hours to fill across streams in proportion to their commit time spans (first to last commit, plus ~30 min lead-in). Round to 0.25 h, minimum 0.25 h, and make the total exactly the hours to fill.
+7. **Hours**: each stream's time is its commit time span (first to last commit, plus ~30 min lead-in). On a normal working day, scale the streams so the total is exactly the hours to fill. On a full day of time off, use the spans as they are (no scaling up), capped as in step 2. Round to 0.25 h, minimum 0.25 h.
 8. **Proposal**: write JSON to `{{HERMES_STATE_WSL}}/proposal-timesheets-<date>.json` (the Windows path is `{{HERMES_STATE_WIN}}\proposal-timesheets-<date>.json`):
    ```json
    {"title": "Timesheets <date>", "actions": [

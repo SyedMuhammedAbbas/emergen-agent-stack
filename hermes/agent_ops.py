@@ -869,7 +869,7 @@ def cmd_init(cfg):
 # ---------- read-only Odoo helpers (JSON on stdout) for agents building proposals ----------
 
 def cmd_odoo(args):
-    """odoo projects | odoo project <id> | odoo tasks <project_id> [--mine] [--open] [--full] | odoo task <id> | odoo timesheets <from> [<to>]"""
+    """odoo projects | odoo project <id> | odoo tasks <project_id> [--mine] [--open] [--full] | odoo task <id> | odoo timesheets <from> [<to>] | odoo timeoff <from> [<to>]"""
     if not args:
         raise SystemExit(cmd_odoo.__doc__)
     odoo, sub = Odoo(), args[0]
@@ -925,11 +925,23 @@ def cmd_odoo(args):
         cfg = load_config()
         emp = find_employee(odoo, cfg["timesheet_employee"])
         d_from, d_to = args[1], args[2] if len(args) > 2 else args[1]
+        # time_off: lines Odoo writes for approved leave; they are not project work and do not count toward "already logged"
         out = [{"date": l["date"], "hours": l["unit_amount"], "project": m2o(l["project_id"]),
-                "task_id": l["task_id"][0] if l["task_id"] else None, "task": m2o(l["task_id"]), "description": l["name"]}
+                "task_id": l["task_id"][0] if l["task_id"] else None, "task": m2o(l["task_id"]), "description": l["name"],
+                "time_off": bool(l.get("holiday_id"))}
                for l in odoo.call("account.analytic.line", "search_read",
                                   [["employee_id", "=", emp], ["date", ">=", d_from], ["date", "<=", d_to]],
-                                  fields=["date", "unit_amount", "project_id", "task_id", "name"], order="date")]
+                                  fields=["date", "unit_amount", "project_id", "task_id", "name", "holiday_id"], order="date")]
+    elif sub == "timeoff":
+        cfg = load_config()
+        emp = find_employee(odoo, cfg["timesheet_employee"])
+        d_from, d_to = args[1], args[2] if len(args) > 2 else args[1]
+        out = [{"from": l["request_date_from"], "to": l["request_date_to"], "type": m2o(l["holiday_status_id"]),
+                "days": l["number_of_days"], "state": l["state"]}
+               for l in odoo.call("hr.leave", "search_read",
+                                  [["employee_id", "=", emp], ["request_date_from", "<=", d_to], ["request_date_to", ">=", d_from],
+                                   ["state", "in", ["confirm", "validate1", "validate"]]],
+                                  fields=["request_date_from", "request_date_to", "holiday_status_id", "number_of_days", "state"])]
     else:
         raise SystemExit(cmd_odoo.__doc__)
     print(json.dumps(out, indent=1, default=str))
