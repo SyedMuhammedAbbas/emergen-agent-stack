@@ -181,8 +181,12 @@ if [ $DRY = 0 ]; then
   # that any open task's execution workspace still points at, whatever task name the folder carries
   in_use=$(jq -r '.[] | select(.status!="done" and .status!="cancelled") | .executionWorkspaceId // empty' <<<"$issues" | sort -u |
     while read -r ew; do curl -sf -m 20 "$API/execution-workspaces/$ew" | jq -r '.cwd // .path // empty'; done)
-  for d in $(find "$WT_ROOT" -mindepth 3 -maxdepth 3 -path '*/.worktrees/*' -type d -mmin +30 2>/dev/null); do
-    ident=$(basename "$d" | grep -o -E '^[A-Z]+-[0-9]+') || continue
+  # Paperclip worktrees (<project>/.worktrees/EME-12-...) and the ones agents make themselves
+  # (<repo>-worktrees/EME-12-..., <project>/.worktrees/agent-EME-12-...); the folder name carries the task key
+  for d in $( { find "$WT_ROOT" -mindepth 3 -maxdepth 3 -path '*/.worktrees/*' -type d -mmin +30
+                find "$WT_ROOT" -mindepth 2 -maxdepth 2 -path '*-worktrees/*' -type d -mmin +30; } 2>/dev/null); do
+    ident=$(basename "$d" | grep -o -i -E '(^|-)[A-Z]+-[0-9]+' | head -1 | sed 's/^-//' | tr a-z A-Z) || continue
+    [ -n "$ident" ] || continue
     st=$(jq -r --arg x "$ident" '.[]|select(.identifier==$x)|.status' <<<"$issues")
     case "$st" in done|cancelled) ;; *) continue ;; esac
     grep -q -x -F "$d" <<<"$in_use" && continue
