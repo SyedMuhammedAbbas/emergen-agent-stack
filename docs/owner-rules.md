@@ -48,7 +48,7 @@ Every standing instruction from the owner, and the file that teaches it to the a
 | Nothing is written to Odoo without the owner's approval in Discord | `hermes/agent_ops.py` (proposals), every Odoo skill |
 | Tickets have a plain title and a description a non-engineer can follow; tickets written by people are not rewritten | `skills/odoo-tickets` |
 | Timesheets: 8 h on working days (Mon-Fri), actual hours on leave days on top of Odoo's time off, nothing on weekends, agent-stack work never logged | `skills/daily-timesheets`, `config.env` (`DAILY_HOURS`, `WORKDAYS`, `TIMESHEET_EXCLUDE_REPOS`) |
-| Standup (DSM) in the owner's exact format | `org/operations/timekeeper.md`, `hermes/agent_ops.py` (`standup`) |
+| Standup (DSM) in the owner's exact format; each completed ticket marked tested or "on staging, manual test pending" | `org/operations/timekeeper.md`, `hermes/agent_ops.py` (`standup`) |
 
 ## Keeping the factory healthy
 
