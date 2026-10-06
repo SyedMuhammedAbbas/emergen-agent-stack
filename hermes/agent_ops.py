@@ -397,12 +397,19 @@ def cmd_digest(cfg):
         pending[issue["id"]] = item
 
     items = list(pending.values())
-    for n, it in enumerate(items, 1):
-        it["n"] = n
+    # Numbers are permanent: an item keeps the number the owner already saw, and a
+    # new item continues from the highest number ever issued, so an old "approve N"
+    # can never land on a different item.
+    last = max([it.get("n", 0) for it in items] + [read_state("last_n", 0)])
+    for it in items:
+        if not it.get("n"):
+            last += 1
+            it["n"] = last
         if it.get("kind") == "proposal":
             it["posted"] = True
+    items.sort(key=lambda it: it["n"])
     write_state("pending", items)
-    write_state("last_n", len(items))
+    write_state("last_n", last)
     write_state("last_digest", {"at": now.isoformat()})
 
     if not items:
