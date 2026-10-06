@@ -49,7 +49,14 @@ The owner and the client open these files to see that the work is done correctly
 4. **No duplicates.** Identical or near-identical files (same screen, same state) are never queued twice. The bridge refuses a proposal whose files repeat.
 5. **One evidence proposal per ticket, once.** If an earlier proposal for the ticket is still waiting, do not queue another (the bridge refuses it); mention its number instead. If the earlier proof was wrong, say so in your summary and ask the board to reject it first.
 6. **The note explains the files.** One sentence on the build and what was done, then one line per file: `01: <what it proves>`. The owner must be able to understand each file without opening the ticket.
-7. **A failed or blocked check is not proof.** If you could not reach the screen or the result, queue nothing for that ticket: report NOT VERIFIED with the reason.
+7. **The file must show what its name and note claim.** These were sent back by the owner:
+   - a "result" shot taken while a button still says "Working…" or a spinner turns: wait until the action has finished and the result is on screen (the new row, the toast, the changed status), then take it;
+   - a file named "confirm dialog on backdrop click" that shows no dialog;
+   - "clamped to 400 characters" with no visible count or value: when the claim is a number, the number must be readable in the image (the counter, the field value, the status text);
+   - a timing claim ("still showing at 9 s", "cleared after 8 s") proved by copies of the same frame: use one short recording with the timestamps in the note, or the device clock visible in each shot.
+   - While capturing, if the screen shows something wrong that is not this ticket (text running outside a dialog, a cut-off button), report it as a new issue; do not crop around it.
+8. **Run the ticket's steps where the ticket says.** If the steps name a place that does not have the feature (Admin panel vs Seller Dashboard), ask the board before verifying it somewhere else.
+9. **A failed or blocked check is not proof.** If you could not reach the screen or the result, queue nothing for that ticket: report NOT VERIFIED with the reason.
 
 ## Queuing the evidence
 

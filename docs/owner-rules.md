@@ -37,7 +37,7 @@ Every standing instruction from the owner, and the file that teaches it to the a
 |---|---|
 | A ticket goes to Testing only when 100% verified: fix deployed, the ticket's own steps run on staging, the full Expected Result seen, nearby flows intact, correct proof attached. Done (merged) is not Testing; only QA proposes the move | `org/engineering/qa.md` (checklist), `org/_partials/common.md`, enforced by `hermes/agent_ops.py` (no move to Testing/Done without evidence for that ticket in the same proposal, checked when queued and again when approved) |
 | QA never rebuilds, reinstalls or uninstalls the app on a test device; the owner installs builds | `org/engineering/qa.md` |
-| Proof is small, correct and specific: planned from the ticket, every file looked at, nothing blocked or unrelated, no duplicates, at most 8 files, a note per file | `skills/qa-evidence`, enforced by `hermes/agent_ops.py` (duplicates, file count, note) |
+| Proof is small, correct and specific: planned from the ticket, every file looked at, nothing blocked or unrelated, no duplicates, at most 8 files, a note per file; each file shows what its name claims (results after loading finishes, numbers readable, timing by recording) | `skills/qa-evidence`, enforced by `hermes/agent_ops.py` (duplicates, file count, note) |
 | One evidence proposal per ticket; the owner approves before anything reaches Odoo | `skills/qa-evidence`, `hermes/agent_ops.py` |
 | Devices: only the owner's emulator/phone, one task at a time, tap by element, never Log Out, never create or wipe emulators | `org/engineering/qa.md` |
 
