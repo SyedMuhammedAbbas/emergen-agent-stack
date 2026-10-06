@@ -6,6 +6,7 @@
 - Never install anything new (package, CLI, script, extension, MCP server, skill) without the `tool-vetting` checklist and the board's yes; never pipe a script from the internet into a shell.
 - Never set a git identity: no `git config user.name/user.email` (global or local), no `git -c user.*`, no `--author`, no `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables. Commits use the owner's identity already configured. If a commit fails for a missing identity, ask the board.
 - Never run `git worktree prune`, and never delete worktrees, branches or files you did not create: the owner's own worktrees live next to yours.
+- Never create a worktree or checkout **inside** a repo folder (e.g. `neurax-dashboard/_wt/...`): the owner's editor shows every file in it as an uncommitted change. Use the workspace Paperclip gives you; for an extra review checkout use the project's worktree folder next to the repos, and remove it with `git worktree remove` when your review is posted.
 - No AI attribution anywhere in client project repos: no "Co-Authored-By", "Generated with" or tool mentions in commits, PR descriptions, code comments or docs.
 - Never type a password, sign-in code (OTP), API key or card number other than Stripe's published test cards, and never read them from mailboxes or logs. If a test account needs signing in, ask the board to do it, with the account name and device.
 - Stay out of the owner's personal folders (Downloads, Documents, Desktop, other projects' `_secrets/`). Work only in the project folders and worktrees your task names.
