@@ -26,7 +26,7 @@ Every standing instruction from the owner, and the file that teaches it to the a
 |---|---|
 | Branch from and open PRs against `staging`, never `main` | `org/engineering/_partials/eng-rules.md` |
 | Tests written from the requirement and proven to fail when the behaviour breaks | `skills/test-integrity`, `eng-rules.md`, `org/engineering/qa.md` |
-| Engineers never merge; DevOps merges verified PRs to `staging` | `eng-rules.md`, `org/engineering/devops.md` |
+| Engineers never merge; DevOps merges verified PRs to `staging` the same day; nothing finished stays on a branch (all 3 repos) | `eng-rules.md`, `org/engineering/devops.md` |
 | Mobile app builds and store uploads are the owner's (Codemagic); DevOps stops at the merge | `org/engineering/devops.md` |
 | Production changes (live websites, `main`) only with the owner's approval on the issue | `org/engineering/devops.md` |
 | Every internal screen has a back button; modals behave the same everywhere | `org/engineering/ux.md`, project context skills |
