@@ -416,9 +416,10 @@ def cmd_digest(cfg):
             out.append("\n" + format_proposal(it))
             continue
         label = digest_labels.get(str(it["odoo_task_id"])) or short_title(it["title"])
-        stage = f", move to {it['stage']}" if it.get("stage") else ""
+        stage = (f", move to {it['stage']}" if it.get("stage")
+                 and not re.search(r"testing|done", str(it["stage"]), re.I) else "")
         out.append(f"**{it['n']}.** {label}: {item_update(it)} ({it['hours']} h{stage})")
-    out.append("\nReply `approve 1,2`, `edit 2 hours=1.5 stage=Testing` or `reject 3 <reason>`. "
+    out.append("\nReply `approve 1,2`, `edit 2 hours=1.5` or `reject 3 <reason>`. "
                "Nothing changes in Odoo until you approve.")
     print("\n".join(out))
 
@@ -463,7 +464,10 @@ def approve(cfg, items, dry_run=False):
             if not dry_run:
                 odoo.call("account.analytic.line", "create", vals)
             actions.append(f"{it['hours']}h timesheet")
-        if it.get("stage") and project_id:
+        if it.get("stage") and re.search(r"testing|done", str(it["stage"]), re.I):
+            # A work item carries no proof; only a QA evidence proposal may move a ticket to Testing/Done.
+            actions.append("stage left unchanged (Testing/Done needs a QA proof proposal)")
+        elif it.get("stage") and project_id:
             sid = odoo.call("project.task.type", "search",
                             [["name", "ilike", it["stage"]], ["project_ids", "in", [project_id]]], limit=1)
             if sid:
