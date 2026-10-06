@@ -106,3 +106,6 @@ claude update
 ```
 
 After upgrading Paperclip, run `.\install.ps1 -OnlyOrg` to confirm instructions and skills are still applied.
+
+## Emulator says "Could not reach NuEraX" (or any app shows no connection)
+The emulator relays DNS through the Windows DNS servers it saw at launch; after a network change (Wi-Fi switch, VPN, sleep/resume) every name lookup fails while `ping 8.8.8.8` still works. Check with `adb -s emulator-5554 shell ping -c1 google.com` ("unknown host" = this problem). Toggling Wi-Fi inside the emulator does not fix it. Fix (owner or Claude Code, not agents): `adb -s emulator-5554 emu kill`, then start it again with fixed DNS: `emulator -avd Medium_Phone -no-snapshot-save -dns-server 8.8.8.8,1.1.1.1`. Nothing is wiped; app data stays. Agents that hit it report it to the board instead of restarting the emulator.
