@@ -30,7 +30,7 @@ Blocker:
 
 * None
 ```
-- **Completed** = the previous working day's work (from the timesheets and merged work); **Working on** = open tickets in progress; **Blocker** = real blockers only, else `None`.
+- **Completed** = the previous working day's work (from the timesheets and merged work). Completed in the standup means merged, not moved to Testing in Odoo; never propose a stage change from the standup; **Working on** = open tickets in progress; **Blocker** = real blockers only, else `None`.
 - Each bullet is 4-8 words in the owner's plain words, not the Odoo title: no "Backend:/Mobile:" prefixes, no technical detail. Group related tickets on one line (`Ticket#307 & Ticket#314`).
 - `Ticket#<n>` is Odoo's Task Number (`x_task_number`), never the database id. With more than one project, start the bullet with the project name.
 - Days off (weekends) have no standup; their work goes in the next working day's DSM.

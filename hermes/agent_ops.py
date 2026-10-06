@@ -704,6 +704,15 @@ def cmd_propose(args, from_chat=False):
                     raise SystemExit(f"duplicate evidence: {Path(f).name} is the same file as {Path(seen[digest]).name}. "
                                      "Queue each shot once.")
                 seen[digest] = f
+    # A ticket moves to Testing (or Done) only together with the proof that it was verified on staging:
+    # the evidence for that same ticket must be in this same proposal. Otherwise the QA engineer reopens it.
+    proven = {a.get("task") for a in actions if a["type"] == "evidence"}
+    unproven = [a.get("task") for a in actions if a["type"] == "stage"
+                and re.search(r"testing|done", str(a.get("stage", "")), re.I) and a.get("task") not in proven]
+    if unproven:
+        raise SystemExit(f"refused: moving task(s) {', '.join(map(str, unproven))} to Testing/Done needs the test proof "
+                         "for the same ticket in this proposal (an `evidence` action). Verify the ticket's own steps on "
+                         "staging first (qa-evidence skill); notes are not proof.")
     pending = read_state("pending", [])
     # one evidence proposal per ticket: a second one (e.g. from a retried run) would attach the same proof twice
     queued = {a.get("task"): p["n"] for p in pending if p.get("kind") == "proposal"
@@ -753,6 +762,14 @@ def relay_proposals() -> list[str]:
 
 
 def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
+    # same rule as at propose time, for proposals queued before it existed: no move to Testing/Done without proof
+    _LABELS.clear(); _LABELS.update(it.get("labels") or {})
+    proven = {a.get("task") for a in it["actions"] if a["type"] == "evidence"}
+    unproven = [a.get("task") for a in it["actions"] if a["type"] == "stage"
+                and re.search(r"testing|done", str(a.get("stage", "")), re.I) and a.get("task") not in proven]
+    if unproven:
+        raise SystemExit(f"Approval {it['n']} not applied: it moves {', '.join(_task_label(t) for t in unproven)} "
+                         "to Testing/Done without test proof. Reject it; QA will verify those tickets and send proof first.")
     created, done = {}, []
     project_ids = {}
 
