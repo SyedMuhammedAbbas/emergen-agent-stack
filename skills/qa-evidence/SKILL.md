@@ -55,6 +55,8 @@ The owner and the client open these files to see that the work is done correctly
    - "clamped to 400 characters" with no visible count or value: when the claim is a number, the number must be readable in the image (the counter, the field value, the status text);
    - a timing claim ("still showing at 9 s", "cleared after 8 s") proved by copies of the same frame: use one short recording with the timestamps in the note, or the device clock visible in each shot.
    - While capturing, if the screen shows something wrong that is not this ticket (text running outside a dialog, a cut-off button), report it as a new issue; do not crop around it.
+   - proof of something the ticket does not ask: copy the ticket's **Expected Result** into your plan word for word and prove each part of it (for example "switches to Reminder set" **and** "still set after refresh"). A side effect you noticed is not the Expected Result.
+   - a guessed cause for an odd measurement ("the emulator runs timers slower"): state what you measured and what the code sets, and leave the cause as an open point.
 8. **Run the ticket's steps where the ticket says.** If the steps name a place that does not have the feature (Admin panel vs Seller Dashboard), ask the board before verifying it somewhere else.
 9. **A failed or blocked check is not proof.** If you could not reach the screen or the result, queue nothing for that ticket: report NOT VERIFIED with the reason.
 
