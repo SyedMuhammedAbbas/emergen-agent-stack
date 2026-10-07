@@ -12,7 +12,7 @@ Every standing instruction from the owner, and the file that teaches it to the a
 | Test only what proves the step; never repeat a passed gate | `common.md` |
 | Never set a git identity; no AI attribution in client repos | `common.md` |
 | Never prune or delete worktrees, branches or files you did not create; never create a worktree inside a repo folder | `common.md`, `wsl/watchdog/watchdog.sh` (keeps worktrees an open task uses) |
-| Never type passwords, sign-in codes, API keys or real card numbers; the owner signs test accounts in | `common.md`, `org/engineering/qa.md` |
+| Never type passwords, sign-in codes, API keys or real card numbers; the owner signs test accounts in (exception: a fixed demo code the owner writes into a task, for named staging test accounts only) | `common.md`, `org/engineering/qa.md` |
 | Stay out of the owner's personal folders and `_secrets/` | `common.md`, project context skills |
 | Nothing new installed without the vetting checklist and the owner's yes | `skills/tool-vetting`, `common.md` |
 | Ask instead of guessing, in the short plain-language question format | `common.md`, `hermes/agent_ops.py` (`format_question`) |
