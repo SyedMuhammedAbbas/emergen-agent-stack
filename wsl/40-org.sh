@@ -145,6 +145,13 @@ jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$HOME/.claude/hooks/wa
   ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json
 log "stop hook installed"
 
+# PreToolUse hook: agents may not install/uninstall apps on, or create/wipe, the shared test devices
+install -m 755 "$REPO_DIR/wsl/hooks/device-guard.sh" ~/.claude/hooks/device-guard.sh
+tmp=$(mktemp)
+jq '.hooks.PreToolUse = [{"matcher":"Bash","hooks":[{"type":"command","command":"$HOME/.claude/hooks/device-guard.sh","timeout":10}]}]' \
+  ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json
+log "device guard hook installed"
+
 # Staleness watchdog: restarts tasks nothing is working on; escalates repeat stalls to the Watchdog agent
 install -m 755 "$REPO_DIR/wsl/watchdog/watchdog.sh" "$STATE_DIR/watchdog.sh"
 if [ "$(uname)" = Darwin ]; then
