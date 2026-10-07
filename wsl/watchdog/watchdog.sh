@@ -136,6 +136,8 @@ while read -r i; do
   [ "$fixed" -ge "$MAX_PER_CYCLE" ] && break
   id=$(jq -r .id <<<"$i"); st=$(jq -r .status <<<"$i"); aid=$(jq -r .assigneeAgentId <<<"$i")
   case "$live_issue_ids" in *" $id "*) continue ;; esac
+  # standing tasks (a recurring duty that checks in on its own schedule) are never "stalled"
+  jq -r .title <<<"$i" | grep -q -i -E "${WATCHDOG_STANDING_RE:-^DevOps: merge every QA-passed PR|\[standing\]}" && continue
   age=$(( (now - $(ts "$(jq -r .updatedAt <<<"$i")")) / 60 ))
   why=""
   case "$st" in
