@@ -27,7 +27,7 @@ say() { echo "$(date +%H:%M) $*"; }
 [ -f "$STATE" ] || echo '{}' > "$STATE"
 
 agents=$(curl -sf "$API/companies/$CID/agents") || { say "paperclip unreachable"; exit 0; }
-issues=$(curl -sf "$API/companies/$CID/issues") || { say "paperclip unreachable"; exit 0; }
+issues=$(curl -sf "$API/companies/$CID/issues?limit=10000") || { say "paperclip unreachable"; exit 0; }
 runs=$(curl -sf "$API/companies/$CID/heartbeat-runs") || runs='[]'
 
 # live = queued/running runs whose process is still alive (or not started yet)
