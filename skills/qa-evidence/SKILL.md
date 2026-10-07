@@ -60,6 +60,8 @@ The owner and the client open these files to see that the work is done correctly
 8. **Run the ticket's steps where the ticket says.** If the steps name a place that does not have the feature (Admin panel vs Seller Dashboard), ask the board before verifying it somewhere else.
 9. **A failed or blocked check is not proof.** If you could not reach the screen or the result, queue nothing for that ticket: report NOT VERIFIED with the reason.
 
+10. **A screen ticket needs screen proof.** If the ticket is about something a person sees (any Odoo title not starting with Backend:, DevOps: or Docs:), the proof must include at least one screenshot or recording of its steps. Logs, API calls, database reads or a search of the deployed code are never a substitute; if you have no browser or device this run, queue nothing and report NOT VERIFIED (no browser/device). The bridge refuses a move to Testing for a screen ticket without an image or video.
+
 ## Queuing the evidence
 
 Write a proposal file and queue it with the bridge (Windows Python called from WSL; quote the Windows path):

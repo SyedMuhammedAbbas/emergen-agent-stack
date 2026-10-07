@@ -710,6 +710,25 @@ def describe_action(a: dict) -> str:
     return f"Create the Odoo tag “{a['name']}”"
 
 
+SCREEN_PROOF_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".mov", ".webm"}
+NON_SCREEN_TITLE = re.compile(r"^\s*(\d+\s*:\s*)?(backend|devops|docs)\b", re.I)
+
+
+def screen_tickets_without_screen_proof(actions: list) -> list:
+    """Tickets moved to Testing/Done whose Odoo title marks them as screen work but whose evidence has no image or video."""
+    moving = {a.get("task") for a in actions if a["type"] == "stage"
+              and re.search(r"testing|done", str(a.get("stage", "")), re.I)}
+    if not moving:
+        return []
+    shots = {a.get("task") for a in actions if a["type"] == "evidence"
+             and any(Path(f).suffix.lower() in SCREEN_PROOF_EXT for f in a.get("files", []))}
+    ids = [t for t in moving if isinstance(t, int)]
+    titles = {r["id"]: r["name"] for r in Odoo().call("project.task", "read", ids, fields=["name"])} if ids else {}
+    labels = ticket_labels(ids) if ids else {}
+    return [labels.get(str(t)) or str(t) for t in ids
+            if t not in shots and not NON_SCREEN_TITLE.search(titles.get(t, ""))]
+
+
 def cmd_propose(args, from_chat=False):
     if "--file" not in args:
         raise SystemExit("Usage: propose --file <proposal.json> [--from-chat]")
@@ -754,6 +773,11 @@ def cmd_propose(args, from_chat=False):
         raise SystemExit(f"refused: moving task(s) {', '.join(map(str, unproven))} to Testing/Done needs the test proof "
                          "for the same ticket in this proposal (an `evidence` action). Verify the ticket's own steps on "
                          "staging first (qa-evidence skill); notes are not proof.")
+    if blind := screen_tickets_without_screen_proof(actions):
+        raise SystemExit(f"refused: {', '.join(blind)} is a screen ticket (its Odoo title is not Backend:/DevOps:/Docs:), "
+                         "and moving it to Testing needs at least one screenshot or screen recording of the ticket's steps. "
+                         "Text, logs, API calls or a search of the code are not proof for a screen. If you could not open "
+                         "the screen, queue nothing and report NOT VERIFIED (qa-evidence skill).")
     pending = read_state("pending", [])
     # one evidence proposal per ticket: a second one (e.g. from a retried run) would attach the same proof twice
     queued = {a.get("task"): p["n"] for p in pending if p.get("kind") == "proposal"
@@ -811,6 +835,9 @@ def execute_proposal(odoo: Odoo, emp: int, it: dict, dry_run: bool) -> str:
     if unproven:
         raise SystemExit(f"Approval {it['n']} not applied: it moves {', '.join(_task_label(t) for t in unproven)} "
                          "to Testing/Done without test proof. Reject it; QA will verify those tickets and send proof first.")
+    if blind := screen_tickets_without_screen_proof(it["actions"]):
+        raise SystemExit(f"Approval {it['n']} not applied: {', '.join(blind)} is a screen ticket and its proof has no "
+                         "screenshot or recording. Reject it; QA will send screen proof.")
     created, done = {}, []
     project_ids = {}
 
