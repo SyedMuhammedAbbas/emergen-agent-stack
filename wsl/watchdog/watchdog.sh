@@ -14,7 +14,7 @@ STALE_MIN=${WATCHDOG_STALE_MIN:-15}      # in_progress/todo untouched this long 
 MAX_FIXES=${WATCHDOG_MAX_FIXES:-3}       # restarts per task within WINDOW_H before escalating
 WINDOW_H=${WATCHDOG_WINDOW_H:-6}
 MAX_PER_CYCLE=${WATCHDOG_MAX_PER_CYCLE:-6}
-RECOVERY_RE='no live execution path|cannot safely continue automatic recovery|automatically retried continuation|Adapter failed|unmanaged background task|issue workspace failed validation|execution-review participant|review stage still has no completed decision|interrupted by the disk guard'
+RECOVERY_RE='spawn E2BIG|no live execution path|cannot safely continue automatic recovery|automatically retried continuation|Adapter failed|unmanaged background task|issue workspace failed validation|execution-review participant|review stage still has no completed decision|interrupted by the disk guard'
 REVIEW_STALE_MIN=${WATCHDOG_REVIEW_STALE_MIN:-180}   # in_review untouched this long, no live run, no open sub-task
 
 now=$(date -u +%s); ts() { date -u -d "$1" +%s 2>/dev/null || echo 0; }
@@ -90,6 +90,27 @@ restart() { # issue-json reason
   fi
   if [ "$recent" -ge "$MAX_FIXES" ] && [ -n "$WD" ]; then
     escalate "$i" "it stalled $recent times in ${WINDOW_H}h; the last reason seen: $why" "keeps stalling"
+    return 0
+  fi
+  # A task whose comment thread has grown too long can no longer start: the run prompt is passed as one
+  # argument and Linux refuses arguments over 128 KB ("spawn E2BIG"). Continue it as a fresh, short copy.
+  local tsize
+  tsize=$(curl -sf -m 60 "$API/issues/$id/comments" | jq '(if type=="array" then . else (.comments // []) end) | map(.body // "" | length) | add // 0' 2>/dev/null)
+  if [ "${tsize:-0}" -gt "${WATCHDOG_THREAD_MAX:-70000}" ]; then
+    summary+=("$ident: comment thread is ${tsize} chars (runs fail with E2BIG) -> recreated as a fresh copy")
+    [ $DRY = 1 ] && return 0
+    local last3 copy2 nid nident
+    last3=$(curl -sf -m 60 "$API/issues/$id/comments" | jq -r '(if type=="array" then . else (.comments // []) end) | .[-3:] | map("---\n" + ((.body // "") | .[0:1500])) | join("\n")')
+    copy2=$(jq -c --arg t "$(jq -r .title <<<"$i" | sed -E 's/ \(cont[^)]*\)$//') (cont.)" --arg ident "$ident" --arg last "$last3" '
+      {title:$t, status:"todo", priority:(.priority // "high"), assigneeAgentId, projectId,
+       description: ((.description // "") + "\n\n---\n**Continues " + $ident + "**, whose comment thread grew too long to start a run. Its last comments, shortened:\n" + $last)}
+      + (if .parentId then {parentId} else {} end) + (if .projectWorkspaceId then {projectWorkspaceId} else {} end)' <<<"$i")
+    nid=$(curl -sf -m 60 -X POST "$API/companies/$CID/issues" -H 'content-type: application/json' -d "$copy2" | jq -r '.id // empty')
+    if [ -z "$nid" ] || [ "$nid" = "$id" ]; then summary+=("$ident: copy was not created; left as is"); return 0; fi
+    nident=$(curl -sf -m 60 "$API/issues/$nid" | jq -r .identifier)
+    curl -sf -X POST "$API/issues/$id/comments" -H 'content-type: application/json' \
+      -d "$(jq -nc --arg b "**Watchdog:** continued in $nident (this thread is too long to start a run)." '{body:$b}')" >/dev/null
+    curl -sf -X PATCH "$API/issues/$id" -H 'content-type: application/json' -d '{"status":"cancelled"}' >/dev/null
     return 0
   fi
   # A task whose last run crashed can be held by Paperclip ("execution_reconciliation_required":
