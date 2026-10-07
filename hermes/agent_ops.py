@@ -393,8 +393,13 @@ def cmd_digest(cfg):
     since_s = read_state("last_digest", {}).get("at")
     since = dt.datetime.fromisoformat(since_s) if since_s else now - dt.timedelta(days=1)
     pending = {p["issue_id"]: p for p in read_state("pending", [])}
+    # Agents' own work hours per task are not the owner's timesheet (the Timekeeper's proposals are), and the
+    # owner rejected every one; the digest lists only real proposals unless DIGEST_WORK_ITEMS=true.
+    work_items = os.environ.get("DIGEST_WORK_ITEMS", "false").lower() == "true"
+    if not work_items:
+        pending = {k: p for k, p in pending.items() if p.get("kind") == "proposal"}
 
-    for issue in pc.issues():
+    for issue in (pc.issues() if work_items else []):
         m = re.match(r"\[ODOO-(\d+)\]", issue.get("title", ""))
         if not m:
             continue
