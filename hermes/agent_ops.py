@@ -121,7 +121,9 @@ class Paperclip:
             return json.loads(raw) if raw else None
 
     def issues(self):
-        return self._req("GET", f"/companies/{self.cid}/issues") or []
+        # Paperclip returns 500 issues unless asked for more; a capped list made the Odoo
+        # intake re-create tasks whose issue had fallen outside the newest 500.
+        return self._req("GET", f"/companies/{self.cid}/issues?limit=10000") or []
 
     def create_issue(self, body):
         return self._req("POST", f"/companies/{self.cid}/issues", body)
@@ -189,11 +191,39 @@ def cmd_intake(cfg):
         tasks = []
     else:
         tasks = odoo.call("project.task", "search_read", [["tag_ids", "in", [ready]]],
-                          fields=["id", "name", "description", "project_id", "stage_id", "date_deadline", "priority", "parent_id"],
+                          fields=["id", "name", "description", "project_id", "stage_id", "date_deadline", "priority", "parent_id",
+                                  "x_task_number"],
                           limit=50)
-        tasks.sort(key=lambda t: bool(t["parent_id"]))  # main tasks first, so sub-tasks can nest under them
+    # Bugs the owner's QA engineer files straight into the QA Issues stage, in projects that have a
+    # Paperclip project, are picked up too (they are never tagged).
+    qa_stage = cfg.get("qa_issues_stage", "QA Issues")
+    mapped = [int(k) for k in cfg.get("project_map", {}) if str(k).isdigit()]
+    if qa_stage and mapped:
+        seen = {t["id"] for t in tasks}
+        tasks += [t for t in odoo.call(
+            "project.task", "search_read",
+            [["project_id", "in", mapped], ["stage_id.name", "=", qa_stage]],
+            fields=["id", "name", "description", "project_id", "stage_id", "date_deadline", "priority", "parent_id",
+                    "x_task_number"],
+            limit=50) if t["id"] not in seen]
+    tasks.sort(key=lambda t: bool(t["parent_id"]))  # main tasks first, so sub-tasks can nest under them
     issues = pc.issues()
-    existing = {i.get("billingCode") for i in issues}  # dedupe on the Paperclip side
+    # Dedupe on the Paperclip side: the billing code, plus any Odoo id named in a title or
+    # description of an issue created by hand ("[ODOO-28415] ...", "Odoo id 28439", "(Odoo 28416)").
+    existing = {i.get("billingCode") for i in issues}
+    for i in issues:
+        text = f"{i.get('title') or ''} {i.get('description') or ''}"
+        existing |= {f"ODOO-{n}" for n in re.findall(r"(?i)\bODOO[- ](?:id )?(\d{4,6})\b", text)}
+        existing |= {f"ODOO-{n}" for n in re.findall(r"(?i)\(Odoo (\d{4,6})\)", text)}
+    # ...and the owner's ticket number in a title ("Ticket#344", "(#326)"), mapped back to the Odoo id
+    # (ticket numbers are only unique inside one Odoo project, so match within the same Paperclip project)
+    pmap = cfg.get("project_map", {})
+    for t in tasks:
+        pc_project = pmap.get(str(t["project_id"][0])) if t["project_id"] else None
+        num = str(t.get("x_task_number") or "")
+        if pc_project and num and any(i.get("projectId") == pc_project
+                                      and num in re.findall(r"#(\d{1,4})\b", i.get("title") or "") for i in issues):
+            existing.add(f"ODOO-{t['id']}")
     for t in tasks:
         code = f"ODOO-{t['id']}"
         project = t["project_id"][1] if t["project_id"] else "(no project)"
