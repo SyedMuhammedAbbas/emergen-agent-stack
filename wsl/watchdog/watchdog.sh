@@ -151,6 +151,20 @@ restart() { # issue-json reason
   jq --arg id "$id" --argjson now "$now" '.[$id] = ((.[$id] // {fixes:[], escalated:null}) | .fixes += [$now] | .escalated = null)' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 }
 
+# A task waiting for the owner's answer is not stalled: an open question card (Paperclip
+# interaction) or a "Question for board" comment with no "Board answer" after it.
+# Checking only the last comment missed these once an agent replied "still waiting",
+# so the same task was woken every cycle.
+waiting_on_board() {
+  local id=$1
+  curl -sf "$API/issues/$id/interactions" | jq -e 'any(.[]?; .status == "pending")' >/dev/null && return 0
+  curl -sf "$API/issues/$id/comments" | jq -e '
+    (if type == "array" then . else (.comments // []) end) as $c
+    | ([$c[] | select(.body | test("^\\*\\*Question for board"; "m")) | .createdAt] | max) as $q
+    | ([$c[] | select(.body | test("^\\*\\*Board answer"; "m")) | .createdAt] | max) as $a
+    | $q != null and ($a == null or $a < $q)' >/dev/null
+}
+
 # 2. tasks of active agents that nothing is working on
 while read -r i; do
   [ -z "$i" ] && continue
@@ -168,8 +182,8 @@ while read -r i; do
       cap=$(jq -r --arg a "$aid" '.[]|select(.id==$a)|.cap' <<<"$active")
       [ "$age" -ge "$STALE_MIN" ] && [ "$busy" -lt "${cap:-1}" ] && why="waiting in todo for ${age} min with the agent free" ;;
     blocked)
+      waiting_on_board "$id" && continue
       last=$(curl -sf "$API/issues/$id/comments" | jq -r 'sort_by(.createdAt) | last | .body // ""')
-      grep -q -E '^\*\*Question for board' <<<"$last" && continue
       grep -q -E "$RECOVERY_RE" <<<"$last" && why="blocked by Paperclip run recovery, not by a question"
       # blocked on other issues that are all finished (Paperclip's own auto-resume does not always fire)
       if [ -z "$why" ] && grep -q -i -E 'blocker|blocked on|blocked by|waiting on' <<<"$last"; then
@@ -186,12 +200,12 @@ while read -r i; do
       # a review nobody is doing: escalate (a restart would undo the review state)
       [ "$age" -ge "$REVIEW_STALE_MIN" ] || continue
       jq -e --arg id "$id" 'any(.[]; .parentId == $id and .status != "done" and .status != "cancelled")' <<<"$issues" >/dev/null && continue
-      last=$(curl -sf "$API/issues/$id/comments" | jq -r 'sort_by(.createdAt) | last | .body // ""')
-      grep -q -E '^\*\*Question for board' <<<"$last" && continue
+      waiting_on_board "$id" && continue
       escalate "$i" "in review for ${age} min with no reviewer run and no open review sub-task" "review is stuck"
       fixed=$((fixed+1)); continue ;;
   esac
   [ -n "$why" ] || continue
+  waiting_on_board "$id" && continue
   restart "$i" "$why"; fixed=$((fixed+1))
 done < <(jq -c --argjson act "$active" '($act|map(.id)) as $ids | .[] |
   select(.assigneeAgentId as $a | $ids | index($a)) | select(.status=="todo" or .status=="in_progress" or .status=="blocked" or .status=="in_review")' <<<"$issues")
