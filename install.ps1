@@ -33,6 +33,13 @@ if (-not $OnlyOrg) {
     Invoke-Step 'Services and logins' 'wsl/30-services.sh'
 }
 Invoke-Step 'Paperclip org, agents and skills' 'wsl/40-org.sh'
+# ponytail plugin for Claude Code on Windows too (40-org.sh installs it in WSL; vetting note there)
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+    Write-Step "== ponytail plugin (Windows Claude Code)"
+    if (-not ((claude plugin marketplace list 2>$null) -match 'ponytail')) { claude plugin marketplace add DietrichGebert/ponytail | Out-Null }
+    claude plugin install ponytail@ponytail 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { claude plugin update ponytail@ponytail 2>$null | Out-Null }
+}
 if (-not $SkipHermes -and -not $OnlyOrg) {
     Write-Step "== Hermes bridge"
     & "$PSScriptRoot\windows\hermes-bridge.ps1"

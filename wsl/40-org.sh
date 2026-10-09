@@ -152,6 +152,17 @@ jq '.hooks.PreToolUse = [{"matcher":"Bash","hooks":[{"type":"command","command":
   ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json
 log "device guard hook installed"
 
+# ponytail plugin (github.com/DietrichGebert/ponytail, MIT): smallest-complete-change mode in every Claude Code
+# session (agents included), plus ponytail-review (a diff) and ponytail-audit (a whole repo).
+# Vetted 2026-10-09 at 5.1.0: no network calls; its hooks only read/write ~/.claude and run `git ls-files`.
+if command -v claude >/dev/null; then
+  claude plugin marketplace list 2>/dev/null | grep -q ponytail ||
+    claude plugin marketplace add DietrichGebert/ponytail >/dev/null || warn "ponytail marketplace add failed"
+  claude plugin install ponytail@ponytail >/dev/null 2>&1 || claude plugin update ponytail@ponytail >/dev/null 2>&1 ||
+    warn "ponytail plugin install failed"
+  log "ponytail plugin installed"
+fi
+
 # Staleness watchdog: restarts tasks nothing is working on; escalates repeat stalls to the Watchdog agent
 install -m 755 "$REPO_DIR/wsl/watchdog/watchdog.sh" "$STATE_DIR/watchdog.sh"
 if [ "$(uname)" = Darwin ]; then

@@ -18,6 +18,12 @@ All skills live in this repo and `wsl/60-sync-skills.sh` installs them for Paper
 | ui-styling | Frontend, UX | MIT / Apache-2.0 (LICENSE.txt) |
 | skill-creator | writing new skills | Anthropic, Apache-2.0 (LICENSE.txt) |
 
+## Plugins (installed by the setup scripts, not vendored)
+
+| Plugin | Used by | Source / license |
+|---|---|---|
+| ponytail (`ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`) | every Claude Code session in WSL (agents) and on Windows | github.com/DietrichGebert/ponytail, MIT. Installed by `wsl/40-org.sh` and `install.ps1`; vetting note in `wsl/40-org.sh` |
+
 ## Present locally, not committed (`skills/.gitignore`)
 
 Installed on this machine and synced like the others, but kept out of git: proprietary, or no license recorded. On a new machine `windows/collect-skills.ps1` copies them from your local Claude / skills installs into `skills/`; anything missing is skipped (the agent works without it).
