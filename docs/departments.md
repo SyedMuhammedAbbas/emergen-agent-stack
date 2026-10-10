@@ -11,8 +11,9 @@ org/
     <key>.md              each agent's instructions (its role standard)
     _partials/            rules for this department only ({{eng-rules}})
     skills/               skills only this department uses (optional)
-  operations/             Timekeeper, Watchdog (and the Hermes agent, added by connect-hermes)
-  branding/               template, off by default: Brand Lead, Social Media Writer, Video Producer
+  operations/             Chief of Staff (reports every team's progress to the owner), Timekeeper, Watchdog (and the Hermes agent, added by connect-hermes)
+  branding/               Brand Lead, Designer, Video Generator (Remotion), Orrisian Content (orrisian.com, LinkedIn)
+  freelance/              Upwork Scout (screens jobs, drafts proposals; the owner submits)
 ```
 
 `DEPARTMENTS` in `config.env` picks which departments a laptop installs (`engineering,operations` by default). Empty means every department whose `department.json` does not say `"enabled": false`.

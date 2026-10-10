@@ -83,8 +83,10 @@ for key in $(jq -r '.agents[].key' "$ORG"); do
     cur=$(paperclipai agent get "$id" --json | jq -c '.adapterConfig | del(.env, .model)')
     body=$(jq -nc --argjson b "$body" --argjson cur "$cur" --argjson cfg "$cfg" '$b + {adapterConfig: ($cur + $cfg)}')
     paperclipai agent update "$id" --json --payload-json "$body" >/dev/null
+    # newer Paperclip requires the revision being replaced (null when the file does not exist yet)
+    rev=$(curl -sf "$API/agents/$id/instructions-bundle/file?path=AGENTS.md" | jq -r '.revision.id // empty' || true)
     curl -sf -X PUT "$API/agents/$id/instructions-bundle/file" -H 'Content-Type: application/json' \
-      -d "$(jq -nc --arg c "$instr" '{path:"AGENTS.md", content:$c}')" >/dev/null || die "instructions update failed: $name"
+      -d "$(jq -nc --arg c "$instr" --arg r "$rev" '{path:"AGENTS.md", content:$c, baseRevisionId:(if $r=="" then null else $r end)}')" >/dev/null || die "instructions update failed: $name"
     action=updated
   else
     body=$(jq -nc --argjson b "$body" --argjson cfg "$cfg" --arg c "$instr" \
@@ -97,6 +99,10 @@ for key in $(jq -r '.agents[].key' "$ORG"); do
   if [ "$(jq -r '.heartbeat // false' <<<"$a")" = true ] && [ "${MANAGER_HEARTBEAT_SEC:-0}" -gt 0 ]; then
     paperclipai agent update "$id" --json --payload-json \
       "{\"runtimeConfig\":{\"heartbeat\":{\"enabled\":true,\"intervalSec\":$MANAGER_HEARTBEAT_SEC,\"maxConcurrentRuns\":1}}}" >/dev/null
+  elif [ "$(jq -r '.heartbeat // false' <<<"$a")" = true ]; then
+    # MANAGER_HEARTBEAT_SEC=0: no timer wake-ups; the agent still wakes on assignments and @-mentions
+    paperclipai agent update "$id" --json --payload-json \
+      '{"runtimeConfig":{"heartbeat":{"enabled":false,"maxConcurrentRuns":1}}}' >/dev/null
   elif [ "$(jq -r '.maxConcurrentRuns // empty' <<<"$a")" != "" ]; then
     # cap parallel runs (e.g. reviewers sharing one test device)
     paperclipai agent update "$id" --json --payload-json \

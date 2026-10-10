@@ -1,8 +1,8 @@
 {
   "key": "branding",
   "name": "Branding",
-  "description": "Brand, social media and video content for the company and its clients. Template: set \"enabled\": true (or add branding to DEPARTMENTS in config.env) once the team has connected its tools.",
-  "enabled": false,
+  "description": "Design, motion graphics and content for the company brand (orrisian.com, LinkedIn) and for clients. Nothing is published by an agent: the owner approves and posts.",
+  "enabled": true,
   "head": "brand-lead",
   "agents": [
     {
@@ -14,7 +14,7 @@
       "model": "claude-sonnet-5",
       "router": false,
       "reportsTo": null,
-      "budgetCents": 1500,
+      "budgetCents": 300,
       "skills": [
         "brand",
         "ux-copy",
@@ -23,34 +23,56 @@
       "maxConcurrentRuns": 1
     },
     {
-      "key": "social-writer",
-      "name": "Social Media Writer",
-      "role": "general",
-      "title": "Social Media Writer",
+      "key": "designer",
+      "name": "Designer",
+      "role": "designer",
+      "title": "Brand and Graphic Designer",
       "icon": "sparkles",
       "model": "claude-sonnet-5",
       "router": false,
       "reportsTo": "brand-lead",
-      "budgetCents": 1000,
+      "budgetCents": 500,
       "skills": [
         "brand",
-        "ux-copy",
-        "banner-design"
+        "design",
+        "design-system",
+        "banner-design",
+        "ui-ux-pro-max",
+        "frontend-design"
       ],
       "maxConcurrentRuns": 1
     },
     {
-      "key": "video-producer",
-      "name": "Video Producer",
+      "key": "video-generator",
+      "name": "Video Generator",
       "role": "general",
-      "title": "Video Producer",
+      "title": "Motion Graphics and Video",
       "icon": "rocket",
       "model": "claude-sonnet-5",
       "router": false,
       "reportsTo": "brand-lead",
-      "budgetCents": 1500,
+      "budgetCents": 700,
       "skills": [
-        "brand"
+        "brand",
+        "remotion-best-practices",
+        "slides"
+      ],
+      "maxConcurrentRuns": 1
+    },
+    {
+      "key": "orrisian-content",
+      "name": "Orrisian Content",
+      "role": "general",
+      "title": "orrisian.com, LinkedIn and motion graphics",
+      "icon": "star",
+      "model": "claude-sonnet-5",
+      "router": false,
+      "reportsTo": "brand-lead",
+      "budgetCents": 300,
+      "skills": [
+        "brand",
+        "ux-copy",
+        "banner-design"
       ],
       "maxConcurrentRuns": 1
     }

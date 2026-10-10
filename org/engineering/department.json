@@ -13,7 +13,7 @@
       "model": "claude-sonnet-5",
       "router": false,
       "reportsTo": null,
-      "budgetCents": 3000,
+      "budgetCents": 300,
       "heartbeat": true,
       "skills": [
         "delivery-gate",
@@ -32,7 +32,7 @@
       "model": "claude-opus-5-5",
       "router": false,
       "reportsTo": "manager",
-      "budgetCents": 3000,
+      "budgetCents": 400,
       "skills": [
         "{{ENGINEERING_SKILL}}",
         "architecture",
@@ -52,7 +52,7 @@
       "model": null,
       "router": true,
       "reportsTo": "manager",
-      "budgetCents": 6000,
+      "budgetCents": 900,
       "skills": [
         "{{ENGINEERING_SKILL}}",
         "delivery-gate",
@@ -79,7 +79,7 @@
       "model": null,
       "router": true,
       "reportsTo": "manager",
-      "budgetCents": 6000,
+      "budgetCents": 900,
       "skills": [
         "{{ENGINEERING_SKILL}}",
         "delivery-gate",
@@ -100,7 +100,7 @@
       "model": null,
       "router": true,
       "reportsTo": "manager",
-      "budgetCents": 3000,
+      "budgetCents": 300,
       "skills": [
         "{{ENGINEERING_SKILL}}",
         "delivery-gate",
@@ -121,7 +121,7 @@
       "model": "claude-opus-5-5",
       "router": false,
       "reportsTo": "manager",
-      "budgetCents": 3000,
+      "budgetCents": 300,
       "skills": [
         "{{ENGINEERING_SKILL}}",
         "delivery-gate",
@@ -141,7 +141,7 @@
       "model": "claude-sonnet-5",
       "router": false,
       "reportsTo": "manager",
-      "budgetCents": 3000,
+      "budgetCents": 400,
       "maxConcurrentRuns": 2,
       "skills": [
         "{{ENGINEERING_SKILL}}",
@@ -164,7 +164,7 @@
       "model": "claude-sonnet-5",
       "router": false,
       "reportsTo": "manager",
-      "budgetCents": 2000,
+      "budgetCents": 100,
       "maxConcurrentRuns": 2,
       "skills": [
         "delivery-gate",
@@ -185,7 +185,7 @@
       "model": "claude-haiku-4-5",
       "router": false,
       "reportsTo": "manager",
-      "budgetCents": 1000,
+      "budgetCents": 100,
       "skills": [
         "documentation-writer",
         "ux-copy",
@@ -202,7 +202,7 @@
       "model": "claude-opus-5-5",
       "router": false,
       "reportsTo": "manager",
-      "budgetCents": 2000,
+      "budgetCents": 200,
       "skills": [
         "project-estimation",
         "xlsx",

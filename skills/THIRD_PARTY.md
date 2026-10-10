@@ -35,6 +35,8 @@ Installed on this machine and synced like the others, but kept out of git: propr
 | accessibility-review, design-critique, ux-copy | Frontend, QA, UX, Docs | Claude "design" plugin |
 | next-best-practices | Frontend | github.com/vercel-labs/next-skills |
 | apple-design | Frontend, UX | github.com/emilkowalski/skills |
+| frontend-design | Designer | local `~/.claude/skills`; source not recorded |
+| remotion-best-practices | Video Generator | local `~/.claude/skills`; source not recorded |
 | ui-ux-pro-max, brand, slides, find-skills | Frontend, UX, docs | local `~/.claude/skills`; source not recorded |
 | paperclip, paperclip-converting-plans-to-tasks | all / Manager | ship with Paperclip, nothing to install |
 

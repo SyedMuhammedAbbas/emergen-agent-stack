@@ -1,0 +1,25 @@
+{
+  "key": "freelance",
+  "name": "Freelance",
+  "description": "Screens Upwork jobs and drafts proposals. The owner reads, edits and submits every proposal.",
+  "enabled": true,
+  "head": "upwork",
+  "agents": [
+    {
+      "key": "upwork",
+      "name": "Upwork Scout",
+      "role": "general",
+      "title": "Upwork leads and proposals",
+      "icon": "eye",
+      "model": "claude-sonnet-5",
+      "router": false,
+      "reportsTo": null,
+      "budgetCents": 500,
+      "skills": [
+        "ux-copy",
+        "writing-plans"
+      ],
+      "maxConcurrentRuns": 1
+    }
+  ]
+}

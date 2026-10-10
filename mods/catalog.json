@@ -1,0 +1,9 @@
+[
+  {
+    "name": "paperclip-crew",
+    "short": "Crew",
+    "icon": "🦀",
+    "title": "Paperclip Crew",
+    "about": "A pixel crab for every Paperclip agent above the prompt: walks while working, dim when idle, red on error. /crew lists them. Polls localhost:3100, no tokens."
+  }
+]

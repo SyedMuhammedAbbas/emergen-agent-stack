@@ -1,0 +1,11 @@
+{
+  "name": "emergen-mods",
+  "owner": { "name": "Emergen" },
+  "plugins": [
+    {
+      "name": "paperclip-crew",
+      "source": "./paperclip-crew",
+      "description": "A mini-bot for every Paperclip agent above the prompt. /crew lists them."
+    }
+  ]
+}
