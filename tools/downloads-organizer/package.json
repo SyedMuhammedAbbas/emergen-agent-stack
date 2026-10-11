@@ -1,0 +1,1 @@
+{ "name": "downloads-organizer", "version": "1.0.0", "private": true, "type": "module", "scripts": { "test": "node rules.test.mjs && node watcher.test.mjs", "start": "node watcher.mjs" } }
