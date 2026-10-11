@@ -9,11 +9,13 @@ Status: **proposal for review. Nothing here is implemented, committed, pushed or
 | 3 | [Recommended architecture](03-architecture.md) |
 | 4 | [Workflow-first onboarding](04-onboarding.md) |
 | 5 | [Plugin and schema specs](05-schemas.md) |
-| 6 | [Jev integration strategy](06-jev-strategy.md) (**provisional, needs the Use Cases Guide**) |
+| 6 | [Jev integration strategy](06-jev-strategy.md) (based on the 19-use-case guide) |
 | 7 | [UI/UX plan](07-ui-ux.md) |
 | 8 | [Technology stack](08-tech-stack.md) |
 | 9 | [Phased roadmap](09-roadmap.md) |
 | 10 | [Repository structure](10-repo-structure.md) |
+| 11 | [M0 spike results](11-m0-results.md) |
+| 12 | [M1 plan: the reconciler](12-m1-plan.md) |
 
 ## Executive summary
 
@@ -43,7 +45,7 @@ Build **one local Control App** (Node/TypeScript daemon, SQLite, web UI) that ad
 
 ## Open questions for you
 
-1. **Please provide the "Jev Use Cases Guide" (19 use cases).** I could not find it on this machine or in the repo, and I will not invent them. Doc 06 is provisional until then.
+1. ~~Jev Use Cases Guide~~ received 2026-10-11; doc 06 now scores all 19 use cases. Remaining Jev question: which OpenRouter key to use (you hold it; I never need to see it).
 2. Is the Control App for you only, or will other teammates install it (affects auth, updates, support burden)?
 3. Is native Windows (no WSL) a goal, or is WSL acceptable if it is managed reliably?
 4. Which matters more first: company workspace polish, or the personal tools (organiser, assistants)?

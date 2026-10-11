@@ -63,7 +63,7 @@ Consequence: the real controls are (a) git worktrees, (b) the `device-guard` Pre
 
 ## 5. Jev
 
-Not run. Requires (a) the Jev Use Cases Guide to define labelled cases, and (b) a Jev API key (via OpenRouter or TypeSafe). Latency, accuracy, long-input behaviour and self-hosting remain ⚠️.
+Not run. The guide has arrived (doc 06); still needs a Jev key (via OpenRouter) and a labelled set (the Downloads move logs are a free one). Latency, accuracy, long-input behaviour and self-hosting remain ⚠️.
 
 ## Other observation (not a spike target)
 
@@ -111,4 +111,4 @@ Updated verdict: native Windows is **viable** for Paperclip plus Claude Code (se
 
 1. ~~Windows symlinks~~ done (M0c). ~~Hooks jq-free and fail-closed~~ done (see M0c).
 2. **WSL keepalive:** run `.\install.ps1` normally (not from this session) to register it, or tell me to try another route.
-3. **Jev:** send the Use Cases Guide and say how I may obtain a Jev key.
+3. **Jev:** guide received (doc 06). Still needed: an OpenRouter key placed in the secret store by you.
