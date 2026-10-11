@@ -53,3 +53,39 @@ test('hook process: exit codes, fail closed', () => {
   assert.equal(run(call('mcp__upwork__submitProposal'), dirWith(policy, [{ tool: 'mcp__upwork__submitProposal', until: '2999-01-01T00:00:00Z' }])).status, 0);
   assert.equal(run(call('mcp__upwork__submitProposal'), dirWith(policy, 'x')).status, 2);
 });
+
+// ---- activity log ----
+import { readFileSync as rf, existsSync as ex, mkdirSync as mk, writeFileSync as wf } from 'node:fs';
+import { eventFor, appendEvent } from './mcp-policy.mjs';
+const logOf = (d) => rf(join(d, 'activity', 'tools.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const runWith = (stdin, dir, env = {}) => spawnSync(process.execPath, [hook], { input: stdin, encoding: 'utf8', env: { ...process.env, AGENT_STACK_STATE: dir, ...env } });
+
+test('every MCP call and result is logged with who and the decision, never with argument values or results', () => {
+  const dir = dirWith(policy), needle = 'canary-value-for-leak-check';
+  const env = { PAPERCLIP_AGENT_ID: 'agent-1', PAPERCLIP_RUN_ID: 'run-1', PAPERCLIP_TASK_ID: 'task-1' };
+  runWith(JSON.stringify({ tool_name: 'mcp__upwork__searchJobs', tool_input: { query: needle, limit: 5 }, session_id: 'abcdef1234567890' }), dir, env);
+  runWith(JSON.stringify({ tool_name: 'mcp__upwork__submitProposal', tool_input: { text: needle } }), dir, env); // ask: blocked, still logged
+  runWith(JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'mcp__upwork__searchJobs', tool_input: { query: needle }, tool_response: { content: [{ text: needle }] } }), dir, env);
+  runWith(JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'mcp__upwork__searchJobs', tool_input: {}, tool_response: { is_error: true, content: needle } }), dir, env);
+  runWith(call('Bash'), dir, env); // not MCP: not logged
+  const raw = rf(join(dir, 'activity', 'tools.jsonl'), 'utf8'), ev = logOf(dir);
+  assert.ok(!raw.includes(needle)); assert.equal(ev.length, 4);
+  assert.deepEqual(ev.map((e) => [e.t, e.name, e.decision ?? e.ok]), [['call', 'searchJobs', 'allowed'], ['call', 'submitProposal', 'blocked'], ['result', 'searchJobs', true], ['result', 'searchJobs', false]]);
+  assert.equal(ev[0].agentId, 'agent-1'); assert.equal(ev[0].server, 'upwork'); assert.deepEqual(ev[0].argKeys, ['query', 'limit']); assert.ok(ev[0].argBytes > 0);
+});
+
+test('with no policy file calls are allowed and still logged; a grant is logged as granted', () => {
+  const dir = dirWith(undefined);
+  assert.equal(runWith(call('mcp__x__y'), dir).status, 0); assert.equal(logOf(dir)[0].decision, 'allowed');
+  const d2 = dirWith(policy, [{ tool: 'mcp__upwork__submitProposal', until: '2999-01-01T00:00:00Z' }]);
+  assert.equal(runWith(call('mcp__upwork__submitProposal'), d2).status, 0); assert.equal(logOf(d2)[0].decision, 'granted');
+});
+
+test('a log that cannot be written never blocks a call; the log rotates when large', () => {
+  const dir = dirWith(policy); wf(join(dir, 'activity'), 'a file where the folder should be'); // makes logging fail
+  assert.equal(runWith(call('mcp__upwork__searchJobs'), dir).status, 0);
+  assert.equal(runWith(call('mcp__upwork__submitProposal'), dir).status, 2); // policy still enforced
+  const d3 = mkdtempSync(join(tmpdir(), 'mcp-rot-')); mk(join(d3, 'activity')); wf(join(d3, 'activity', 'tools.jsonl'), 'x'.repeat(5 * 1024 * 1024 + 10));
+  appendEvent(d3, eventFor({ tool_name: 'mcp__a__b' }, { action: 'allow' }));
+  assert.ok(ex(join(d3, 'activity', 'tools.1.jsonl'))); assert.equal(logOf(d3).length, 1);
+});

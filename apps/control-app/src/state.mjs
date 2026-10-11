@@ -10,6 +10,7 @@ import { LOG_UNITS } from './logs.mjs';
 import { appDirOf } from './audit.mjs';
 import { buildTeam, runStackPlan } from './team.mjs';
 import { readModels, pathsOf } from './models.mjs';
+import { readTools } from './tools.mjs';
 import { readInventory, listBackups, lastScan } from './safety.mjs';
 import { loadCache, saveCache, mergeRuns, buildCost, buildActivity } from './costs.mjs';
 
@@ -47,6 +48,13 @@ export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new D
     try { models.data = await (io.readModels ?? ((st) => readModels(st, { exec: io.exec, fetch: io.fetch })))(settings); } catch { /* keep the last reading */ }
     finally { models.running = false; models.at = Date.now(); }
   }
+  // tool activity (the MCP hook's log) and the integrations policy: refreshed in the background about every 15 s
+  const tools = { at: 0, data: null, running: false };
+  async function refreshTools() {
+    if (tools.running) return; tools.running = true;
+    try { tools.data = await (io.readTools ?? ((st) => readTools(st, { exec: io.exec, agentNames: cache.agents })))(settings); } catch { /* keep the last reading */ }
+    finally { tools.running = false; tools.at = Date.now(); }
+  }
   async function refreshPlan() {
     if (plan.running) return; plan.running = true;
     try { plan.data = await (io.stackPlan ?? ((st) => runStackPlan(st, { exec: io.exec })))(settings); plan.error = null; } catch (e) { plan.error = String(e.message).slice(0, 160); }
@@ -76,6 +84,7 @@ export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new D
     if (paperclip.up && !plan.running && Date.now() - plan.at > (io.planEveryMs ?? 60000)) refreshPlan();
     const team = buildTeam(paperclip.raw?.agents ?? [], plan.data, { ranAt: plan.at ? new Date(plan.at).toISOString() : null, error: plan.error });
     if (!models.running && Date.now() - models.at > (io.modelsEveryMs ?? 30000)) refreshModels();
+    if (!tools.running && Date.now() - tools.at > (io.toolsEveryMs ?? 15000)) refreshTools();
     if (!safety.running && Date.now() - safety.at > (io.safetyEveryMs ?? 60000)) refreshSafety();
     const safetyView = safety.data ? { ...safety.data, lastScan: lastScan(appDir) } : null;
     const needs = deriveNeeds({ services, paperclip, diskFreeGB: disk, spend, team, safety: safetyView, now: nowD });
@@ -85,7 +94,7 @@ export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new D
       paperclip: { up: paperclip.up, error: paperclip.error, company: paperclip.company?.name ?? null },
       crew: paperclip.crew ?? [], recent: paperclip.recent ?? [], approvalsPending: paperclip.approvalsPending ?? 0,
       runs: { today: cost.days.at(-1)?.runs ?? 0, month: cost.month.runs },
-      spend, cost, activity, team, safety: safetyView, models: models.data ? { ...models.data, paths: pathsOf(team.agents) } : null,
+      spend, cost, activity, team, tools: tools.data, safety: safetyView, models: models.data ? { ...models.data, paths: pathsOf(team.agents) } : null,
       disk: { cFreeGB: disk },
     };
   }

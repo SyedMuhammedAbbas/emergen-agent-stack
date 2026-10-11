@@ -23,9 +23,17 @@ Claude Code is the MCP host (agents already run `claude mcp add` servers); we do
 ## Not done, and why
 
 - **Registering integrations into Paperclip's tool connections.** I have not verified a Paperclip API for it, so I did not guess one.
-- **The hook is not installed on your live agents yet.** It is installed when `wsl/40-org.sh` next runs (`install.ps1 -OnlyOrg`, or the Set up screen). Until then the tests are the evidence, not the running system.
+- **Installed on the live WSL on 2026-10-12** (settings backed up as `~/.claude/settings.json.bak-mcp-hook`); `wsl/40-org.sh` installs it on a fresh machine. No agent has made a real MCP call through it yet.
 - **Third-party planners.** Planners run in-process, so only first-party tools in this repo may be runner tools. Untrusted code would need a subprocess and is out of scope.
 - **GitHub integration.** `gh` is already authenticated in WSL and the agents use it; a policy entry for a GitHub MCP server can be added the same way as Upwork when you use one.
 - Cross-volume moves fail (rename only) rather than copy-and-delete, because there is no delete.
 
 Tests: `node --test packages/tools wsl/hooks` (traversal, junction escape, malicious planners and manifests, tampered plan, undo round trip byte-identical, changed-file refusal, hook exit codes and fail-closed cases).
+
+## Update: activity log and the Tools screen
+
+The same hook (`wsl/hooks/mcp-policy.mjs`) now also runs after each MCP call (`PostToolUse`) and appends every call and its result to `~/.agent-stack/activity/tools.jsonl` (rotates at 5 MB). Recorded: time, server, tool name, the decision (allowed, blocked, off, granted), who (`PAPERCLIP_AGENT_ID`, run and task when Paperclip provides them), the **size** of the arguments and their key names, and whether the result was an error. **Never recorded:** argument values or result content. Logging cannot block or break a call.
+
+The control app's **Tools** screen reads that log and the policy file: connected tools, each tool's allow/ask/off list, 24-hour counts (calls, blocked, failed), temporary approvals, tools that were called but are not in the list, and a feed of what happened with the agent's name.
+
+Verified: hook behaviour and logging in tests and by simulated calls on the live WSL; the screen against that data at desktop and phone width. **Not yet verified:** that Paperclip's agent processes pass `PAPERCLIP_AGENT_ID` into the hook's environment (it is in Paperclip's source, but no agent has made a real MCP call yet). If it does not, the feed shows "An agent" instead of a name.

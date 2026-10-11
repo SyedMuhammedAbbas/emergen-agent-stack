@@ -167,7 +167,7 @@ install -m 644 "$REPO_DIR/wsl/hooks/device-guard.mjs" ~/.claude/hooks/device-gua
 install -m 755 "$REPO_DIR/wsl/hooks/mcp-policy.sh" ~/.claude/hooks/mcp-policy.sh
 install -m 644 "$REPO_DIR/wsl/hooks/mcp-policy.mjs" ~/.claude/hooks/mcp-policy.mjs
 tmp=$(mktemp)
-jq '.hooks.PreToolUse = [{"matcher":"Bash","hooks":[{"type":"command","command":"$HOME/.claude/hooks/device-guard.sh","timeout":10}]},{"matcher":"mcp__.*","hooks":[{"type":"command","command":"$HOME/.claude/hooks/mcp-policy.sh","timeout":10}]}]' \
+jq '.hooks.PreToolUse = [{"matcher":"Bash","hooks":[{"type":"command","command":"$HOME/.claude/hooks/device-guard.sh","timeout":10}]},{"matcher":"mcp__.*","hooks":[{"type":"command","command":"$HOME/.claude/hooks/mcp-policy.sh","timeout":10}]}] | .hooks.PostToolUse = [{"matcher":"mcp__.*","hooks":[{"type":"command","command":"$HOME/.claude/hooks/mcp-policy.sh","timeout":10}]}]' \
   ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json
 log "device guard and integrations policy hooks installed"
 node "$REPO_DIR/apps/cli/stack.mjs" integrations sync || warn "could not write the integrations policy"

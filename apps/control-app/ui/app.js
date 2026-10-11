@@ -296,6 +296,30 @@ function safetyScreen() {
     '<p class="tiles-note">Paths and permissions only; file contents are never read here. Windows file permissions are not checked.</p>';
 }
 
+// ---- Tools: connected tools, what each is allowed to do, and what they have done ----
+const POLICY_WORD = { allow: 'allowed', ask: 'asks first', off: 'off' };
+function toolsScreen() {
+  const t = S.tools;
+  if (!t) return '<h1>Tools</h1><p class="sub">Reading the tool log…</p>';
+  const tile = (n, label) => `<div class="tile"><b class="big">${n}</b><span class="s">${label}</span></div>`;
+  const chipFor = (a) => `<span class="chip ${a === 'allow' ? 'ok' : ''}">${esc(POLICY_WORD[a] ?? a)}</span>`;
+  const cards = t.integrations.map((i) => `<section class="card" aria-label="${esc(i.server)}"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">${esc(i.server)}</h2>${lamp(i.calls24h ? 'ok' : 'off', i.calls24h ? 'Active today' : 'No activity yet')}</div>
+      <p class="s">Everything not listed below ${i.defaultPolicy === 'ask' ? 'asks you first' : i.defaultPolicy === 'allow' ? 'is allowed' : 'is off'}.</p>
+      ${i.policy.length ? `<p>${i.policy.map((p) => `<span class="mono-s">${esc(p.tool)}</span> ${chipFor(p.action)}`).join(' &nbsp; ')}</p>` : ''}
+      <p class="s mono-s">Last 24 h: ${i.calls24h} call${i.calls24h === 1 ? '' : 's'}, ${i.blocked24h} blocked, ${i.errors24h} failed${i.lastAt ? ` · last used ${esc(i.lastTool)} ${ago(i.lastAt)}` : ''}</p></section>`).join('');
+  const unlisted = t.unlisted.length ? `<section class="card"><h2>Used but not in your list</h2><p class="hint">These asked to run and were treated as "asks first".</p><div class="rows">${t.unlisted.map((u) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span class="t">${esc(u.server)}</span><span class="s mono-s">${u.calls24h} call${u.calls24h === 1 ? '' : 's'} · ${u.blocked24h} blocked</span></div>`).join('')}</div></section>` : '';
+  const grants = t.grants.length ? `<section class="card"><h2>Temporary approvals</h2><div class="rows">${t.grants.map((g) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span class="t mono-s">${esc(g.tool.replace(/^mcp__/, '').replace('__', ' › '))}</span><span class="s">until ${new Date(g.until).toLocaleString()}</span></div>`).join('')}</div></section>` : '';
+  const verb = (f) => (f.kind === 'result' ? (f.ok === false ? 'failed' : 'finished') : f.decision === 'blocked' || f.decision === 'off' ? 'was blocked from' : 'called');
+  const feed = t.feed.length ? `<div class="rows">${t.feed.map((f) => `<div class="row" style="grid-template-columns:48px minmax(0,2fr) auto auto"><span style="width:42px">${f.agent ? crabSvg(f.agent.replace(/^agent .*/, 'Agent'), 'idle') : ''}</span><span><span class="t">${esc(f.agent ?? 'An agent')} ${verb(f)} ${esc(f.name)}</span><br><span class="s">${esc(f.server ?? '')}${f.argKeys.length ? ' · inputs: ' + esc(f.argKeys.join(', ')) : ''}</span></span>
+      <span>${f.kind === 'result' ? lamp(f.ok === false ? 'fail' : 'ok', f.ok === false ? 'Failed' : 'Done') : lamp(f.decision === 'blocked' || f.decision === 'off' ? 'fail' : 'ok', { allowed: 'Allowed', granted: 'Approved', blocked: 'Blocked', off: 'Off' }[f.decision] ?? 'Called')}</span><span class="s mono-s" style="text-align:right;white-space:nowrap">${ago(f.at)}</span></div>`).join('')}</div>`
+    : `<p class="hint" style="padding:12px 18px">${t.logging.hasLog ? 'Nothing in the last 24 hours.' : 'No tool calls recorded yet. They appear here the moment an agent uses a connected tool.'}</p>`;
+  return `<h1>Tools</h1><p class="sub">Every tool your agents can use, what each is allowed to do, and what it has done. Only names and outcomes are recorded here, never the contents of a request or its answer.</p>
+    <div class="tiles">${tile(t.integrations.length, 'connected')}${tile(t.last24h.calls, 'calls in 24 h')}${tile(t.last24h.blocked, 'blocked')}${tile(t.last24h.errors, 'failed')}</div>
+    ${t.hasPolicy ? cards : '<section class="card"><h2>No tools connected yet</h2><p class="hint">Connected tools are listed from your integrations policy. Run <span class="mono-s">stack integrations sync</span> after adding one.</p></section>'}
+    ${unlisted}${grants}
+    <section class="card flush" style="padding:0"><h2 style="padding:16px 18px 0;margin:0">What happened</h2>${feed}</section>`;
+}
+
 // ---- Set up (M3): describe -> review the blueprint -> approve -> apply ----
 const SETUP = { step: 'describe', text: '', req: null, bp: null, errors: [], via: '', note: '', busy: false, opts: null, job: null };
 const AUTONOMY_WORD = { quiet: 'Quiet: wakes only when asked', balanced: 'Balanced', watchful: 'Watchful: checks in often' };
@@ -382,6 +406,7 @@ const ROUTES = { home: ['Home', home, 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4
   team: ['Team', team, 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0'],
   cost: ['Cost', cost, 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.3 5 3.3-2.2 3-5 3-5-1.1-5-3'], safety: ['Safety', safetyScreen, 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],
   models: ['Models', models, 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5'],
+  tools: ['Tools', toolsScreen, 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z'],
   setup: ['Set up', setupScreen, 'M12 5v14M5 12h14'],
   activity: ['Activity', activity, 'M3 12h4l3-8 4 16 3-8h4'] };
 const icon = (p) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${p}"/></svg>`;
@@ -390,7 +415,7 @@ const route = () => { const h = (location.hash.replace(/^#\/?/, '') || 'home').s
 function paint() {
   const r = route(), badge = S?.needs.length ?? 0;
   $('nav').innerHTML = Object.entries(ROUTES).map(([k, v]) => `<a href="#/${k}" ${k === r ? 'aria-current="page"' : ''}>${icon(v[2])}<span>${v[0]}</span>${k === 'home' && badge ? `<b class="badge" aria-label="${badge} need you">${badge}</b>` : ''}</a>`).join('');
-  const MORE = ['activity', 'models', 'safety', 'setup'], main4 = Object.entries(ROUTES).filter(([k]) => !MORE.includes(k));
+  const MORE = ['cost', 'activity', 'models', 'safety', 'setup'], main4 = Object.entries(ROUTES).filter(([k]) => !MORE.includes(k));
   $('tabs').style.gridTemplateColumns = 'repeat(' + (main4.length + 1) + ',1fr)';
   $('tabs').innerHTML = main4.map(([k, v]) => '<a href="#/' + k + '" ' + (k === r ? 'aria-current="page"' : '') + '>' + icon(v[2]) + v[0] + '</a>').join('') + '<button type="button" data-more ' + (MORE.includes(r) ? 'aria-current="page"' : '') + '>' + icon('M4 7h16M4 12h16M4 17h16') + 'More</button>';
   const main = $('main');
@@ -422,7 +447,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setPanel(f
 $('logo').innerHTML = crab('Manager', 'working');
 $('railclock').textContent = 'v0.1';
 document.addEventListener('click', (e) => {
-  if (e.target.closest('[data-more]')) { const d = $('dlg'); d.innerHTML = '<h3>More</h3><p style="display:flex;flex-direction:column;gap:8px"><a class="btn" href="#/activity">Activity</a><a class="btn" href="#/models">Models</a><a class="btn" href="#/safety">Safety</a><a class="btn" href="#/setup">Set up</a></p><div class="acts"><button class="btn" type="button" data-x>Close</button></div>'; d.querySelectorAll('a,[data-x]').forEach((b) => { b.onclick = () => d.close(); }); d.showModal(); return; }
+  if (e.target.closest('[data-more]')) { const d = $('dlg'); d.innerHTML = '<h3>More</h3><p style="display:flex;flex-direction:column;gap:8px"><a class="btn" href="#/cost">Cost</a><a class="btn" href="#/activity">Activity</a><a class="btn" href="#/models">Models</a><a class="btn" href="#/safety">Safety</a><a class="btn" href="#/setup">Set up</a></p><div class="acts"><button class="btn" type="button" data-x>Close</button></div>'; d.querySelectorAll('a,[data-x]').forEach((b) => { b.onclick = () => d.close(); }); d.showModal(); return; }
   const ps = e.target.closest('[data-preset]'); if (ps) return setupPreset(ps.dataset.preset);
   const su = e.target.closest('[data-setup]'); if (su && !su.disabled) { const a = su.dataset.setup; if (a === 'read') return setupInterpret(); if (a === 'apply') return setupApply(); if (a === 'back') { SETUP.step = 'describe'; return paint(); } if (a === 'again') { Object.assign(SETUP, { step: 'describe', req: null, bp: null, job: null, errors: [], note: '' }); return paint(); } }
   const ag = e.target.closest('[data-agent]'); if (ag) return openAgent(ag.dataset.agent);
