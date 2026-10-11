@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "downloads-folder",
+  "title": "Which folder does a download belong in?",
+  "description": "Rules decide first. A model only gets a say on files the rules cannot place well, and only when it is confident. It picks a folder; it never moves anything.",
+  "kind": "choice",
+  "options": [
+    { "id": "_Credentials" }, { "id": "Qualifi" }, { "id": "3D Models" }, { "id": "Installers" }, { "id": "Twill Press" },
+    { "id": "Identity and Legal" }, { "id": "Finance" }, { "id": "Study and Applications" }, { "id": "Work Docs" },
+    { "id": "Recordings" }, { "id": "Audio" }, { "id": "Images and Logos" }, { "id": "Archives" }, { "id": "Documents" },
+    { "id": "Code and Data" }, { "id": "Misc" }, { "id": "none" }
+  ],
+  "threshold": 0.7,
+  "fallback": { "kind": "rule" },
+  "dataClass": "filenames",
+  "timeoutMs": 8000,
+  "eval": { "loader": "moved-csv", "minAnswerAccuracy": 0.9, "minMarginOverBaseline": 0.03, "minCoverage": 0.05, "minLabelled": 50 },
+  "enabled": false
+}

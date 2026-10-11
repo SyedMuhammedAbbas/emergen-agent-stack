@@ -8,6 +8,7 @@
 //   stack doctor                       check the Paperclip server against what the reconciler was built for
 //   stack tools list|plan|apply|undo   run a tool: plan (changes nothing), apply with the plan's code, undo from the journal
 //   stack integrations sync|list|grant|revoke   per-tool allow/ask/off for MCP tools; grant lifts "ask" for a limited time
+//   stack decisions list|eval|probe    Jev-style closed-choice decisions: prove on labelled examples before enabling
 // Options: --api <origin> (default $STACK_API or http://127.0.0.1:3100)  --state <dir> (default ~/.agent-stack)
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -74,8 +75,9 @@ function printPlan(plan, json) {
 const filterOnly = (plan) => (only ? { ...plan, agents: plan.agents.filter((a) => a.key === only) } : plan);
 
 async function main() {
+  if (cmd === 'decisions') return (await import('./decisions-cmd.mjs')).run({ argv, state, repo, log, die });
   if (cmd === 'tools' || cmd === 'integrations') return (await import('./tools-cmd.mjs')).run({ argv, state, repo, log, die });
-  if (!cmd || cmd === 'help' || flag('help')) return log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 14).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+  if (!cmd || cmd === 'help' || flag('help')) return log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 15).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
 
   if (cmd === 'render') { execFileSync('bash', [join(repo, 'wsl', '41-render.sh')], { stdio: 'inherit' }); return; }
 
