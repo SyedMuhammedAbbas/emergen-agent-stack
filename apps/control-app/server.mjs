@@ -1,5 +1,5 @@
 // Agent Stack control app. Run: node apps/control-app/server.mjs   (or app.cmd at the repo root)
-// Loopback only, a random token on every API call, Host and Origin checks, JSON only. Read-only in M2.1.
+// Loopback only, a random token on every API call, Host and Origin checks, JSON only. Actions: start/stop/restart of known services, audited.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,11 +7,16 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createStore, loadSettings } from './src/state.mjs';
+import { createAudit, appDirOf } from './src/audit.mjs';
+import { createActions } from './src/actions.mjs';
+import { readLogs } from './src/logs.mjs';
+import { runDoctor } from './src/doctor.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2' };
 
-export function createServer({ store, token = crypto.randomBytes(16).toString('hex'), uiDir = path.join(here, 'ui') }) {
+export function createServer({ store, token = crypto.randomBytes(16).toString('hex'), uiDir = path.join(here, 'ui'), actions, audit, settings, repo = path.resolve(here, '..', '..'), io }) {
+  const readJson = async (req) => { let s = ''; for await (const c of req) { s += c; if (s.length > 10_000) throw new Error('request too large'); } try { return s ? JSON.parse(s) : {}; } catch { throw new Error('bad JSON'); } };
   const send = (res, code, data) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(data)); };
   const server = http.createServer(async (req, res) => {
     try {
@@ -21,6 +26,14 @@ export function createServer({ store, token = crypto.randomBytes(16).toString('h
         if (req.headers['x-stack-token'] !== token) return send(res, 401, { error: 'Open the app from the link it printed; this page has no valid token.' });
         if (req.headers.origin && new URL(req.headers.origin).host !== host) return send(res, 403, { error: 'bad origin' });
         if (url.pathname === '/api/state' && req.method === 'GET') return send(res, 200, await store.get());
+        if (url.pathname === '/api/audit' && req.method === 'GET' && audit) return send(res, 200, audit.recent(Math.min(50, Number(url.searchParams.get('n')) || 10)));
+        if (url.pathname === '/api/logs' && req.method === 'GET' && settings) return send(res, 200, await readLogs(String(url.searchParams.get('service') ?? ''), settings, { exec: io?.exec }));
+        if (req.method === 'POST') {
+          if (!/^application\/json/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'JSON only' });
+          const b = await readJson(req);
+          if (url.pathname === '/api/action' && actions) { const r = await actions.run({ service: String(b.service ?? ''), action: String(b.action ?? ''), force: b.force === true }); const { status, ...rest } = r; return send(res, status, rest); }
+          if (url.pathname === '/api/doctor' && settings) return send(res, 200, await runDoctor({ settings, state: await store.get(), repo, io }));
+        }
         return send(res, 404, { error: 'not found' });
       }
       if (req.method !== 'GET') { res.writeHead(405); return res.end(); }
@@ -36,14 +49,15 @@ export function createServer({ store, token = crypto.randomBytes(16).toString('h
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const repo = path.resolve(here, '..', '..');
-  const store = createStore({ settings: loadSettings({ repo }) });
-  const { server, token } = createServer({ store });
+  const settings = loadSettings({ repo }), store = createStore({ settings });
+  const audit = createAudit(appDirOf(settings)), actions = createActions({ settings, store, audit });
+  const { server, token } = createServer({ store, actions, audit, settings, repo });
   const want = Number(process.argv[process.argv.indexOf('--port') + 1]) || 4790;
   let port = want;
   server.on('error', (e) => { if (e.code === 'EADDRINUSE' && port < want + 10) server.listen(++port, '127.0.0.1'); else throw e; });
   server.listen(port, '127.0.0.1', () => {
     const url = `http://127.0.0.1:${port}/?t=${token}`;
-    console.log(`Agent Stack control app\n\n  ${url}\n\nLeave this window open. Ctrl+C stops it. (Read-only in this version.)`);
+    console.log(`Agent Stack control app\n\n  ${url}\n\nLeave this window open. Ctrl+C stops it. Actions are limited to starting, stopping and restarting services, and are logged.`);
     store.start(); store.refresh().catch(() => {});
     if (!process.argv.includes('--no-open')) spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', windowsHide: true }).unref();
   });

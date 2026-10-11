@@ -9,6 +9,7 @@ let token = null;
 try { token = new URLSearchParams(location.search).get('t') || sessionStorage.getItem('stack-token'); if (token) sessionStorage.setItem('stack-token', token); } catch { /* storage blocked: the link must be opened again after a reload */ }
 if (location.search.includes('t=')) history.replaceState(null, '', location.pathname + location.hash);
 
+let lastKey = null;
 let S = null, failure = null, THEME = ''; try { THEME = localStorage.getItem('theme') || ''; } catch { /* no storage */ }
 const DEPTS = [['engineering', 'Engineering'], ['operations', 'Operations'], ['branding', 'Branding'], ['freelance', 'Freelance']];
 
@@ -37,7 +38,7 @@ function svcDetail(s) {
   return [s.port ? `port <span class="mono">${s.port}</span>` : s.kind, s.state === 'ok' && s.uptimeSec != null ? `up <span class="mono">${dur(s.uptimeSec)}</span>` : '', s.state === 'ok' && s.memMB != null ? `<span class="mono">${mem(s.memMB)}</span>` : ''].filter(Boolean).join(' · ');
 }
 function needsCard() {
-  const items = S.needs.map((x) => `<li><span class="lamp ${x.level}"><i></i><span class="sr">${x.level === 'fail' ? 'Problem' : 'Attention'}</span></span><div><p><b>${esc(x.title)}</b></p><p class="why">${esc(x.why)}</p><p class="hint">${esc(x.hint)}</p></div><span></span></li>`).join('');
+  const items = S.needs.map((x) => `<li><span class="lamp ${x.level}"><i></i><span class="sr">${x.level === 'fail' ? 'Problem' : 'Attention'}</span></span><div><p><b>${esc(x.title)}</b></p><p class="why">${esc(x.why)}</p><p class="hint">${esc(x.hint)}</p></div><div>${fixButton(x.fix)}</div></li>`).join('');
   return `<section class="card" id="needs" aria-labelledby="h-need"><h2 id="h-need">Needs you</h2>${items ? `<ul class="need">${items}</ul>` : `<p class="empty">${lamp('ok', 'Nothing needs you right now.')}</p>`}</section>`;
 }
 function spendCard() {
@@ -68,11 +69,89 @@ function home() {
     <div class="grid g2">${needsCard()}${spendCard()}</div>
     ${crewCard()}${recentCard()}</div>`;
 }
+// ---- actions: confirm, run, report. The server enforces the allow-list and the busy guard; this only asks politely first ----
+let BUSY = false, DOCTOR = null, AUDIT = [], LOGS = {};
+async function api(path, body) {
+  const res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'x-stack-token': token ?? '', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+  let json = {}; try { json = await res.json(); } catch { /* not JSON */ }
+  return { status: res.status, json };
+}
+function toast(msg, bad) {
+  const n = document.createElement('div'); n.textContent = msg; n.setAttribute('role', bad ? 'alert' : 'status');
+  n.style.cssText = `position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:${bad ? 'var(--fail)' : 'var(--ink)'};color:${bad ? '#fff' : 'var(--on-ink)'};padding:10px 18px;border-radius:99px;z-index:60;font-size:14px;max-width:calc(100vw - 32px)`;
+  document.body.append(n); setTimeout(() => n.remove(), bad ? 6000 : 2600);
+}
+function confirmDialog({ title, message, label, danger }) {
+  return new Promise((resolve) => {
+    const d = $('dlg');
+    d.innerHTML = `<h3>${esc(title)}</h3><p>${esc(message)}</p><div class="acts"><button class="btn" type="button" data-x>Cancel</button><button class="btn ${danger ? 'danger' : 'primary'}" type="button" data-ok>${esc(label)}</button></div>`;
+    d.onclose = () => resolve(d.returnValue === 'ok');
+    d.querySelector('[data-x]').onclick = () => d.close('cancel'); d.querySelector('[data-ok]').onclick = () => d.close('ok');
+    d.showModal(); d.querySelector('[data-x]').focus();
+  });
+}
+const EFFECT = {
+  stop: { paperclip: 'Agents stop taking work and any run in progress ends. Tasks stay queued and resume when it is started again.', jev: "Engineers' Claude requests fail until it is back.", omniroute: 'Non-Claude models are unavailable until it is back.' },
+  restart: { _: 'This takes about 10 seconds. Runs in progress may be interrupted.' },
+  start: { wsl: 'Starts Ubuntu and the services in it. About 20 seconds.', keepalive: 'Starts the task that keeps WSL awake.', _: 'Starts it now.' },
+};
+const VERB = { start: ['Start', 'Started'], stop: ['Stop', 'Stopped'], restart: ['Restart', 'Restarted'] };
+async function doAction(service, action, force = false) {
+  if (BUSY) return;
+  const svc = S.services.find((s) => s.id === service), [verb, done] = VERB[action];
+  BUSY = true; paint();
+  try {
+    const { status, json } = await api('/api/action', { service, action, force });
+    if (status === 409 && json.needsConfirm === 'busy') {
+      BUSY = false; paint();
+      const go = await confirmDialog({ title: `${verb} ${svc.title} anyway?`, message: `${json.working} agent${json.working > 1 ? 's are' : ' is'} working right now. ${(EFFECT[action][service] ?? EFFECT[action]._)}`, label: `${verb} anyway`, danger: true });
+      if (go) return doAction(service, action, true);
+      return;
+    }
+    if (json.ok) toast(`${done} ${svc.title}.`); else toast(json.error ?? 'That did not work.', true);
+  } catch { toast('The control app did not answer.', true); }
+  BUSY = false; await load(); loadAudit();
+}
+async function askAction(service, action) {
+  const svc = S.services.find((s) => s.id === service), [verb] = VERB[action];
+  if (await confirmDialog({ title: `${verb} ${svc.title}?`, message: EFFECT[action][service] ?? EFFECT[action]._, label: verb, danger: action === 'stop' })) doAction(service, action);
+}
+async function loadAudit() { try { const r = await api('/api/audit?n=8'); if (Array.isArray(r.json)) { AUDIT = r.json; if (route() === 'services') paint(); } } catch { /* optional */ } }
+async function toggleLogs(id) {
+  if (LOGS[id] !== undefined) { delete LOGS[id]; return paint(); }
+  LOGS[id] = 'Loading…'; paint();
+  const r = await api(`/api/logs?service=${encodeURIComponent(id)}`); LOGS[id] = r.json.text ?? 'No log is available.'; paint();
+}
+async function runDoctorNow() { DOCTOR = { running: true }; paint(); const r = await api('/api/doctor', {}); DOCTOR = r.status === 200 ? r.json : { error: true }; paint(); }
+
+function actionButtons(s) {
+  const dis = BUSY ? 'disabled' : '', b = [];
+  const up = s.state === 'ok' || s.state === 'warn';
+  if (s.actions.includes('restart') && up) b.push(`<button class="btn small" data-act="restart:${s.id}" ${dis} type="button">Restart</button>`);
+  if (s.actions.includes('stop') && up) b.push(`<button class="btn small danger" data-act="stop:${s.id}" ${dis} type="button">Stop</button>`);
+  if (s.actions.includes('start') && (s.state === 'fail' || (['wsl', 'keepalive'].includes(s.id) && s.state !== 'ok'))) b.push(`<button class="btn small primary" data-act="start:${s.id}" ${dis} type="button">Start</button>`);
+  if (s.hasLogs) b.push(`<button class="btn small" data-logs="${s.id}" type="button" aria-expanded="${LOGS[s.id] !== undefined}">Logs</button>`);
+  return b.join('');
+}
+const fixButton = (fix) => (fix ? `<button class="btn small primary" data-act="${fix.action}:${fix.service}" ${BUSY ? 'disabled' : ''} type="button">${esc(fix.label)}</button>` : '');
+
+function doctorCard() {
+  let body = '<p class="hint" style="margin:0 0 12px">Checks the things that have gone wrong on this PC before. A fix is only offered when it is a safe start or restart.</p>';
+  if (DOCTOR?.running) body += '<p class="hint">Checking…</p>';
+  else if (DOCTOR?.error) body += '<p class="hint" role="alert">The checks could not run.</p>';
+  else if (DOCTOR) body += `<ul class="need">${DOCTOR.results.map((r) => `<li><span class="lamp ${r.status}"><i></i><span class="sr">${r.status}</span></span><div><p><b>${esc(r.title)}</b></p>${r.detail ? `<p class="why">${esc(r.detail)}</p>` : ''}</div><div>${fixButton(r.fix)}</div></li>`).join('')}</ul><p class="tiles-note">Checked ${ago(DOCTOR.ranAt)}.</p>`;
+  return `<section class="card" aria-labelledby="h-doc"><h2 id="h-doc">Doctor</h2>${body}<button class="btn primary" data-doctor ${DOCTOR?.running ? 'disabled' : ''} type="button">${DOCTOR && !DOCTOR.running ? 'Run checks again' : 'Run checks'}</button></section>`;
+}
+function auditCard() {
+  const rows = AUDIT.map((a) => `<li style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:8px 0;border-top:1px solid var(--line-2)"><span>${lamp(a.ok ? 'ok' : 'fail', `${(VERB[a.action] ?? [a.action])[0]} ${a.service}`)}${a.error ? `<br><span class="s">${esc(a.error)}</span>` : ''}</span><span class="s mono-s">${ago(a.at)}</span></li>`).join('');
+  return `<section class="card" aria-labelledby="h-aud"><h2 id="h-aud">Recent actions</h2>${rows ? `<ul class="need" style="gap:0">${rows}</ul>` : '<p class="hint">Nothing yet. Every start, stop and restart made here is recorded.</p>'}</section>`;
+}
 function services() {
-  const rows = S.services.map((s) => `<div class="row" style="grid-template-columns:minmax(0,2fr) minmax(0,1.2fr) minmax(0,2fr)"><span><span class="t">${esc(s.title)}</span><br><span class="s">${esc(s.about)}</span></span><span>${lamp(s.state, s.text)}</span><span class="s">${esc(s.kind)}${s.port ? ` · port <span class="mono">${s.port}</span>` : ''}${s.state === 'ok' && s.uptimeSec != null ? ` · up <span class="mono">${dur(s.uptimeSec)}</span>` : ''}${s.state === 'ok' && s.memMB != null ? ` · <span class="mono">${mem(s.memMB)}</span>` : ''}${s.restarts ? ` · restarted ${s.restarts}×` : ''}</span></div>`).join('');
-  return `<h1>Services</h1><p class="sub">What runs behind the agents. This version only reads; start, stop and logs arrive in the next update. See “Needs you” on Home for what to do if something is down.</p>
+  const rows = S.services.map((s) => `<div><div class="row" style="grid-template-columns:minmax(0,2fr) minmax(0,1.2fr) minmax(0,2fr) auto"><span><span class="t">${esc(s.title)}</span><br><span class="s">${esc(s.about)}</span></span><span>${lamp(s.state, s.text)}</span><span class="s">${esc(s.kind)}${s.port ? ` · port <span class="mono">${s.port}</span>` : ''}${s.state === 'ok' && s.uptimeSec != null ? ` · up <span class="mono">${dur(s.uptimeSec)}</span>` : ''}${s.state === 'ok' && s.memMB != null ? ` · <span class="mono">${mem(s.memMB)}</span>` : ''}${s.restarts ? ` · restarted ${s.restarts}×` : ''}</span><span class="acts">${actionButtons(s)}</span></div>${LOGS[s.id] !== undefined ? `<div class="drawer"><pre class="log">${esc(LOGS[s.id])}</pre></div>` : ''}</div>`).join('');
+  return `<h1>Services</h1><p class="sub">Start, stop and check what runs behind the agents. Stopping something agents depend on asks first, and every action is recorded.</p>
   <div class="card flush"><div class="rows">${rows}</div></div>
-  <p class="tiles-note">C: has <span class="mono">${S.disk.cFreeGB ?? '?'} GB</span> free. Checked ${ago(S.checkedAt)}.</p>`;
+  <p class="tiles-note">C: has <span class="mono">${S.disk.cFreeGB ?? '?'} GB</span> free. Checked ${ago(S.checkedAt)}.</p>
+  <div class="grid g2" style="margin-top:16px">${doctorCard()}${auditCard()}</div>`;
 }
 
 // ---- shell ----
@@ -98,7 +177,7 @@ async function load() {
     const res = await fetch('/api/state', { headers: { 'x-stack-token': token ?? '' }, cache: 'no-store' });
     if (res.status === 401) { failure = { title: 'This page does not have the access key.', hint: 'Open the app from the link printed in the terminal window (it contains ?t=…).' }; S = null; }
     else if (!res.ok) throw new Error(String(res.status));
-    else { S = await res.json(); failure = null; }
+    else { const next = await res.json(), key = JSON.stringify({ ...next, checkedAt: 0 }); const changed = key !== lastKey || failure; S = next; failure = null; lastKey = key; if (!changed) return; }
   } catch { failure = { title: 'The control app stopped answering.', hint: 'Start it again with app.cmd, then open the new link it prints.' }; }
   paint();
 }
@@ -108,6 +187,12 @@ $('theme').onclick = () => { const dark = document.documentElement.dataset.theme
 addEventListener('hashchange', () => { paint(); scrollTo(0, 0); });
 $('logo').innerHTML = crab('Manager', 'working');
 $('railclock').textContent = 'v0.1';
-applyTheme(); paint(); load();
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-act],[data-logs],[data-doctor]'); if (!t || t.disabled) return;
+  if (t.dataset.act) { const [action, service] = t.dataset.act.split(':'); return askAction(service, action); }
+  if (t.dataset.logs) return toggleLogs(t.dataset.logs);
+  if (t.hasAttribute('data-doctor')) return runDoctorNow();
+});
+applyTheme(); paint(); load(); loadAudit();
 setInterval(load, 5000);
 setInterval(() => { const el = $('checked'); if (el && S) el.textContent = `Checked ${ago(S.checkedAt)}`; }, 1000);

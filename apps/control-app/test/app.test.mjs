@@ -125,6 +125,19 @@ test('needs and headline', () => {
   assert.equal(deriveNeeds({ services: healthy.map((s) => (s.id === 'keepalive' ? svc('keepalive', 'fail') : s)), paperclip: { up: true, crew: [] }, diskFreeGB: 80 })[0].id, 'keepalive');
 });
 
+test('needs carry a fix only when the server would allow that action', () => {
+  const A = (id, state, actions, extra = {}) => ({ id, title: id, about: id, state, actions, ...extra });
+  const base = [A('wsl', 'ok', ['start']), A('keepalive', 'ok', ['start']), A('paperclip', 'ok', ['start', 'stop', 'restart']), A('omniroute', 'ok', ['start', 'stop', 'restart'])];
+  const withSvc = (id, over) => base.map((s) => (s.id === id ? { ...s, ...over } : s));
+  const need = (services, id) => deriveNeeds({ services, paperclip: { up: true, crew: [] }, diskFreeGB: 80 }).find((n) => n.id === id);
+  assert.deepEqual(need(withSvc('omniroute', { state: 'fail' }), 'omniroute').fix, { service: 'omniroute', action: 'start', label: 'Start omniroute' });
+  assert.equal(need(withSvc('omniroute', { state: 'warn' }), 'omniroute').fix.action, 'restart');
+  assert.equal(need(withSvc('omniroute', { state: 'fail', actions: [] }), 'omniroute').fix, undefined);          // not controllable: no button
+  assert.equal(need(withSvc('wsl', { state: 'fail' }), 'wsl').fix.service, 'wsl');
+  assert.equal(need(withSvc('keepalive', { state: 'fail', text: 'Not registered' }), 'keepalive').fix, undefined);   // needs the PowerShell script
+  assert.equal(need(withSvc('keepalive', { state: 'warn', text: 'Ready' }), 'keepalive').fix.action, 'start');
+});
+
 test('the store caches, coalesces concurrent refreshes, and builds the spend view', async () => {
   let reads = 0, t = new Date(2026, 9, 11, 21, 0, 0);
   const io = { exec: async (c, a) => { if (a[0] === '-l') { reads++; return { stdout: 'Ubuntu-24.04\n' }; } return c === 'wsl.exe' ? { stdout: SYSTEMD } : { stdout: SCHT }; }, fetch: async (u) => (String(u).includes('/api/companies') ? fakePaperclip()(u) : { status: 200 }), diskFreeGB: () => 80 };

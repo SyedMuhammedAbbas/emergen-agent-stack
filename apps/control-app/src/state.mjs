@@ -5,6 +5,8 @@ import { readServices } from './services.mjs';
 import { readPaperclip, projectMonth } from './paperclip.mjs';
 import { diskFreeGB } from './probes.mjs';
 import { deriveNeeds, headline } from './needs.mjs';
+import { CONTROL } from './actions.mjs';
+import { LOG_UNITS } from './logs.mjs';
 
 export const DEFAULTS = { distro: 'Ubuntu-24.04', paperclip: 'http://127.0.0.1:3100', budgetUsd: 100, alertAt: 0.8, companyName: undefined };
 
@@ -21,7 +23,9 @@ export function loadSettings({ appDir = join(process.env.LOCALAPPDATA ?? '.', 'A
 export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new Date() }) {
   let latest = null, inflight = null; const started = now().toISOString();
   async function build() {
-    const [services, paperclip] = await Promise.all([readServices(settings, io), readPaperclip(settings.paperclip, { fetch: io.fetch, now: now(), companyName: settings.companyName })]);
+    const [rawServices, paperclip] = await Promise.all([readServices(settings, io), readPaperclip(settings.paperclip, { fetch: io.fetch, now: now(), companyName: settings.companyName })]);
+    // what the UI may offer for each service (the server enforces the same list)
+    const services = rawServices.map((x) => ({ ...x, actions: CONTROL[x.id]?.actions ?? [], hasLogs: Boolean(LOG_UNITS[x.id]) || ['keepalive', 'hermes'].includes(x.id) }));
     const disk = (io.diskFreeGB ?? diskFreeGB)();
     const needs = deriveNeeds({ services, paperclip, diskFreeGB: disk });
     const month = paperclip.runs?.monthUsd ?? 0;

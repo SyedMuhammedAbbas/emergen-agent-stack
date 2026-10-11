@@ -2,18 +2,21 @@
 // Things that are optional and simply not set up (state "off") are NOT counted: they are shown on Services, not nagged about.
 
 /** @returns {{ level:'ok'|'warn'|'fail', text:string }[]} each item: what, and why it matters / what is safe */
+const can = (s, a) => (s.actions ?? []).includes(a);   // the same list the server enforces
 export function deriveNeeds({ services, paperclip, diskFreeGB }) {
   const needs = [];
   const by = Object.fromEntries(services.map((s) => [s.id, s]));
   if (by.wsl?.state === 'fail') {
-    needs.push({ id: 'wsl', level: 'fail', title: 'WSL is not running', why: 'Paperclip, jev-router and OmniRoute cannot be reached until it starts. Agents are paused; nothing is lost.', hint: 'Open Ubuntu from the Start menu, or run: wsl -d Ubuntu-24.04' });
+    needs.push({ id: 'wsl', level: 'fail', title: 'WSL is not running', why: 'Paperclip, jev-router and OmniRoute cannot be reached until it starts. Agents are paused; nothing is lost.', hint: 'Open Ubuntu from the Start menu, or run: wsl -d Ubuntu-24.04', ...(can(by.wsl, 'start') && { fix: { service: 'wsl', action: 'start', label: 'Start WSL' } }) });
   } else {
     for (const s of services) {
-      if (s.state === 'fail' && !['wsl', 'keepalive'].includes(s.id)) needs.push({ id: s.id, level: 'fail', title: `${s.title} is not running`, why: s.about + '.', hint: 'Start it from Services (coming in the next step), or restart WSL.' });
-      else if (s.state === 'warn' && s.id !== 'keepalive') needs.push({ id: s.id, level: 'warn', title: `${s.title} is running but not answering`, why: 'It may be starting or stuck.', hint: 'Give it a minute, then check its log.' });
+      if (s.state === 'fail' && !['wsl', 'keepalive'].includes(s.id)) needs.push({ id: s.id, level: 'fail', title: `${s.title} is not running`, why: s.about + '.', hint: can(s, 'start') ? 'Starting it is safe; its log is on Services.' : 'Check its log on Services, or restart WSL.', ...(can(s, 'start') && { fix: { service: s.id, action: 'start', label: `Start ${s.title}` } }) });
+      else if (s.state === 'warn' && s.id !== 'keepalive') needs.push({ id: s.id, level: 'warn', title: `${s.title} is running but not answering`, why: 'It may be starting or stuck.', hint: 'Give it a minute, then check its log.', ...(can(s, 'restart') && { fix: { service: s.id, action: 'restart', label: `Restart ${s.title}` } }) });
     }
   }
-  if (by.keepalive && by.keepalive.state !== 'ok') needs.push({ id: 'keepalive', level: 'warn', title: 'The keepalive task is not running', why: 'WSL may shut down when you are away and stop your agents.', hint: 'Run .\\windows\\wsl-host.ps1 from your own PowerShell.' });
+  if (by.keepalive && by.keepalive.state !== 'ok') needs.push({ id: 'keepalive', level: 'warn', title: 'The keepalive task is not running', why: 'WSL may shut down when you are away and stop your agents.',
+    hint: by.keepalive.text === 'Not registered' ? 'Run .\\windows\\wsl-host.ps1 from your own PowerShell.' : 'Starting it is safe.',
+    ...(by.keepalive.text !== 'Not registered' && can(by.keepalive, 'start') && { fix: { service: 'keepalive', action: 'start', label: 'Start the keepalive' } }) });
   if (paperclip?.up === false && by.wsl?.state !== 'fail' && by.paperclip?.state === 'ok') needs.push({ id: 'paperclip-api', level: 'warn', title: 'Paperclip is not answering from Windows', why: paperclip.error ?? '', hint: 'Check localhost:3100 in a browser.' });
   if (paperclip?.up) {
     if (paperclip.approvalsPending > 0) needs.push({ id: 'approvals', level: 'warn', title: `${paperclip.approvalsPending} approval${paperclip.approvalsPending > 1 ? 's' : ''} waiting for you`, why: 'Agents are waiting for a decision.', hint: 'Open Paperclip to approve or reject.' });
