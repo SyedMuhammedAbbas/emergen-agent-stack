@@ -29,9 +29,9 @@ Spend is summed from each run's `usageJson.costUsd` (what it would cost at API p
 | Start, Stop, Restart | Paperclip, jev-router, OmniRoute | Confirmation dialog. Stop/Restart while agents are working need a second, explicit confirmation, **enforced by the server** |
 | Start | WSL, the keepalive task | Confirmation dialog |
 
-- The browser sends only ; the server has a fixed allow-list (own keys only) and runs the exact  or  command, with no shell.
-- One action at a time, a short cool-down per service, and every attempt (also failures and refusals of the busy guard being overridden) is appended to .
-- Logs (last 40 lines) and audit errors are passed through a redactor that masks keys, tokens, JWTs,  values and long hex strings.
+- The browser sends only `{service, action}`; the server has a fixed allow-list (own keys only) and runs the exact `systemctl` or `schtasks` command, with no shell.
+- One action at a time, a short cool-down per service, and every attempt (successes and failures, and whether the busy guard was overridden) is appended to `%LOCALAPPDATA%\AgentStack\audit.jsonl`.
+- Logs (last 40 lines) and audit errors pass through a redactor that masks keys, tokens, JWTs, `password=` values and long hex strings.
 - **Doctor** runs 13 read-only checks (WSL, keepalive, each service, Paperclip version, disk, Claude login in WSL and on Windows, the service PATH, ids file, symlinks, reconciler contract). A fix button appears only for a safe start or restart and goes through the same guarded runner.
 
 ## Settings (optional)
