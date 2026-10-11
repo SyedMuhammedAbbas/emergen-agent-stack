@@ -96,6 +96,15 @@ test('keep-live is stable, and a later template change on that field becomes a c
   assert.deepEqual(ops(planAgent(d3, l2)), { title: 'conflict' });
 });
 
+test('a person who reverts their edit is back in step, so a later template change is a plain update', () => {
+  const d0 = base(), l0 = liveOf(d0), applied = appliedFor(d0, l0);
+  const edited = { ...l0, title: 'Mine', stack: applied };
+  const rec = nextApplied(d0, planAgent(d0, edited), edited, applied, 't1');
+  assert.deepEqual({ d: rec.desired, l: rec.live }, { d: applied.desired, l: applied.live });   // keep-live left the baseline alone
+  const reverted = { ...l0, stack: rec };                                          // title back to what we wrote
+  assert.deepEqual(ops(planAgent({ ...d0, title: 'Template v2' }, reverted)), { title: 'update' });
+});
+
 test('env is compared by key names (values are redacted by the API), but a changed value is a template change', () => {
   const d0 = { ...base(), env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:4000' } }, l0 = liveOf(d0), applied = appliedFor(d0, l0);
   const l = { ...l0, stack: applied };

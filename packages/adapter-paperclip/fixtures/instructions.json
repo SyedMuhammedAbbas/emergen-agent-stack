@@ -1,0 +1,29 @@
+{
+  "path": "AGENTS.md",
+  "content": "You build.\n",
+  "contentHash": "2f4a0d8c8a21036dc4850755793c3d88a643213358f3be0b9839021c7df632c1",
+  "size": 11,
+  "revision": {
+    "companyId": "COMPANY",
+    "agentId": "AGENT-ENG",
+    "id": "ID-3",
+    "entryFile": "AGENTS.md",
+    "contentHash": "2f4a0d8c8a21036dc4850755793c3d88a643213358f3be0b9839021c7df632c1",
+    "byteLength": 11,
+    "parentRevisionId": null,
+    "baseRevisionId": null,
+    "restoredFromRevisionId": null,
+    "actorAgentId": null,
+    "actorUserId": "local-board",
+    "responsibleUserId": "local-board",
+    "sourceRunId": null,
+    "source": "api",
+    "createdAt": "1970-01-01T00:00:00.000Z"
+  },
+  "language": "markdown",
+  "markdown": true,
+  "isEntryFile": true,
+  "editable": true,
+  "deprecated": false,
+  "virtual": false
+}

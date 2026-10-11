@@ -38,6 +38,22 @@ export function desiredAgents(org, instructionsByKey, settings) {
   });
 }
 
+/**
+ * Skills named by the template but not imported into Paperclip can't be assigned. Leave them out of the comparison
+ * (otherwise the agent shows a permanent difference and verification can never pass) and report them, as 40-org.sh did.
+ * @param {DesiredAgent[]} desired @param {Set<string>} available  skill slugs present in the Paperclip company
+ * @returns {{ desired: DesiredAgent[], missing: Record<string,string[]> }}
+ */
+export function dropUnavailableSkills(desired, available) {
+  const missing = {};
+  const out = desired.map((d) => {
+    const gone = d.skills.filter((s) => !available.has(s));
+    if (gone.length) missing[d.key] = gone;
+    return gone.length ? { ...d, skills: d.skills.filter((s) => available.has(s)) } : d;
+  });
+  return { desired: out, missing };
+}
+
 /** Same three cases as 40-org.sh: timer on, timer off (still wakes on assignments), or just a run cap. */
 export function heartbeatFor(a, managerHeartbeatSec) {
   if (a.heartbeat === true && managerHeartbeatSec > 0) return { enabled: true, intervalSec: managerHeartbeatSec, maxConcurrentRuns: 1 };

@@ -23,11 +23,11 @@ export const liveHash = (f, l) => hash(l[f]);      // env: sorted key names
  * @param {(Record<string,any> & { stack?: any }) | null} live  normalised live projection (env = sorted key names)
  * @param {{ resolve?: 'ask'|'keep-live'|'take-template' }} [opts]
  */
-export function planAgent(d, live, { resolve = 'ask' } = {}) {
+export function planAgent(d, live, { resolve = 'ask', fields: FL = FIELDS } = {}) {
   if (!live) return { key: d.key, action: 'create', fields: [] };
   const applied = live.stack ?? null;
   const fields = [];
-  for (const f of FIELDS) {
+  for (const f of FL) {
     if (d[f] === undefined) continue;                    // not managed for this agent
     const dh = desiredHash(f, d), lh = liveHash(f, live);
     // env values can't be read back, so equal key names don't prove equal values: once applied, a changed
@@ -98,14 +98,16 @@ export function planAll(desired, liveAgents, ids, opts) {
 }
 
 /** The applied-state record to store after a successful apply, given the plan and the live projection read back. */
-export function nextApplied(d, planAgentResult, liveAfter, prior, tpl) {
+export function nextApplied(d, planAgentResult, liveAfter, prior, tpl, FL = FIELDS) {
   const desired = { ...(prior?.desired ?? {}) }, live = { ...(prior?.live ?? {}) };
   const opOf = Object.fromEntries((planAgentResult.fields ?? []).map((x) => [x.field, x.op]));
-  for (const f of FIELDS) {
+  for (const f of FL) {
     if (d[f] === undefined) continue;
     const op = planAgentResult.action === 'create' ? 'update' : opOf[f];
     if (op === 'update' || op === 'record' || op === 'noop') { desired[f] = desiredHash(f, d); live[f] = liveHash(f, liveAfter); }
-    else if (op === 'keep-live') { desired[f] = desiredHash(f, d); delete live[f]; }   // remember the template, not the person's value
+    // keep-live changes nothing once we have a baseline: if the person reverts to what we wrote, the field is back in
+    // step; if the template then moves, it is a conflict. Without a baseline (adoption) only the template hash is noted.
+    else if (op === 'keep-live') { if (desired[f] === undefined) desired[f] = desiredHash(f, d); }
     // unresolved conflict / adopt-diff: leave whatever was recorded before
   }
   return { key: d.key, tpl, desired, live };

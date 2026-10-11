@@ -1,0 +1,129 @@
+{
+  "id": "AGENT-ENG",
+  "companyId": "COMPANY",
+  "name": "Eng",
+  "role": "engineer",
+  "title": "Engineer",
+  "icon": "code",
+  "appearance": {
+    "schemaVersion": 1,
+    "characterVersion": "cap-v1",
+    "paletteId": "coral-current"
+  },
+  "status": "idle",
+  "reportsTo": "AGENT-MANAGER",
+  "capabilities": null,
+  "adapterType": "claude_local",
+  "adapterConfig": {
+    "engine": "cli",
+    "command": "/bin/true",
+    "timeoutSec": 3600,
+    "instructionsFilePath": "/DATA/instances/default/companies/COMPANY/agents/AGENT-ENG/instructions/AGENTS.md",
+    "instructionsRootPath": "/DATA/instances/default/companies/COMPANY/agents/AGENT-ENG/instructions",
+    "instructionsEntryFile": "AGENTS.md",
+    "instructionsBundleMode": "managed",
+    "env": {
+      "ANTHROPIC_BASE_URL": {
+        "type": "plain",
+        "value": "***REDACTED***"
+      }
+    }
+  },
+  "runtimeConfig": {
+    "heartbeat": {
+      "enabled": false,
+      "maxConcurrentRuns": 2
+    }
+  },
+  "defaultEnvironmentId": null,
+  "budgetMonthlyCents": 900,
+  "spentMonthlyCents": 0,
+  "pauseReason": null,
+  "pausedAt": null,
+  "errorReason": null,
+  "permissions": {
+    "canCreateAgents": true,
+    "canCreateSkills": true
+  },
+  "lastHeartbeatAt": null,
+  "metadata": {
+    "stack": {
+      "key": "eng",
+      "tpl": "t",
+      "live": {
+        "title": "y"
+      },
+      "desired": {
+        "title": "x"
+      }
+    }
+  },
+  "createdAt": "2000-01-01T00:00:00.000Z",
+  "updatedAt": "2000-01-01T00:00:00.000Z",
+  "urlKey": "eng",
+  "avatarUrl": "/api/agent-avatars/cap-v1/coral-current/rest.png?size=512&scale=1",
+  "orgChainHealth": {
+    "status": "healthy",
+    "reason": "healthy",
+    "fullChain": [
+      {
+        "id": "AGENT-ENG",
+        "companyId": "COMPANY",
+        "name": "Eng",
+        "status": "idle",
+        "reportsTo": "AGENT-MANAGER",
+        "depth": 0,
+        "relation": "self"
+      },
+      {
+        "id": "AGENT-MANAGER",
+        "companyId": "COMPANY",
+        "name": "Manager",
+        "status": "idle",
+        "reportsTo": null,
+        "depth": 1,
+        "relation": "ancestor"
+      }
+    ],
+    "firstInvalidAncestor": null,
+    "invalidAncestors": [],
+    "repairGuidance": null,
+    "pausedAncestors": [],
+    "escalationWarning": null
+  },
+  "chainOfCommand": [
+    {
+      "id": "AGENT-MANAGER",
+      "name": "Manager",
+      "role": "pm",
+      "title": "Manager"
+    }
+  ],
+  "access": {
+    "canAssignTasks": true,
+    "taskAssignSource": "agent_creator",
+    "membership": {
+      "id": "ID-1",
+      "companyId": "COMPANY",
+      "principalType": "agent",
+      "principalId": "AGENT-ENG",
+      "status": "active",
+      "membershipRole": "member",
+      "createdAt": "2000-01-01T00:00:00.000Z",
+      "updatedAt": "2000-01-01T00:00:00.000Z"
+    },
+    "grants": [
+      {
+        "id": "ID-2",
+        "companyId": "COMPANY",
+        "principalType": "agent",
+        "principalId": "AGENT-ENG",
+        "permissionKey": "tasks:assign",
+        "scope": null,
+        "grantedByUserId": "local-board",
+        "createdAt": "2000-01-01T00:00:00.000Z",
+        "updatedAt": "2000-01-01T00:00:00.000Z"
+      }
+    ]
+  }
+}

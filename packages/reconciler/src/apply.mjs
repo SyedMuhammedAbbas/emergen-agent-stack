@@ -7,6 +7,7 @@
 import { appendFileSync, mkdirSync, readFileSync, existsSync, writeFileSync, rmSync, openSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { equalsLive, nextApplied } from './plan.mjs';
+import { rollbackRoutine } from './routines.mjs';
 
 export class VerifyError extends Error {}
 
@@ -107,10 +108,12 @@ export async function applyPlan({ pc, cid, desired, live, plan, ctx, journal, tp
 }
 
 /** Undo one apply from its journal, newest change first. Created agents stay (M1 never deletes). Env values can't be restored. */
-export async function rollback({ pc, cid, dir, ctx, log = () => {} }) {
+export async function rollback({ pc, cid, dir, ctx, st, log = () => {} }) {
   const steps = Journal.read(dir);
   const warnings = [];
   for (const s of steps.slice().reverse()) {
+    if (s.t === 'rcreated') warnings.push('routine "' + s.routine + '" (' + s.id + ') was created by this apply and is left in place');
+    if (s.t === 'rbefore' || s.t === 'rcommit') { await rollbackRoutine(pc, s, st); log('  restored routine ' + s.routine); }
     if (s.t === 'created') warnings.push(`agent "${s.agent}" (${s.id}) was created by this apply and is left in place`);
     if (s.t === 'commit') { await pc.setMetadata(s.id, { stack: s.prevStack ?? undefined }); log(`  restored applied-state of ${s.agent}`); }
     if (s.t !== 'before') continue;

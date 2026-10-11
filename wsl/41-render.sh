@@ -17,8 +17,13 @@ for f in "$OUT"/agents/*.md; do [ -e "$f" ] || continue; grep -qxF "$(basename "
 for key in $keep; do render_role "$key" > "$OUT/agents/$key.md" || die "rendering the instructions of $key failed"; done
 tpl=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)
 [ -z "$(git -C "$REPO_DIR" status --porcelain -- org skills project-skills 2>/dev/null)" ] || tpl="$tpl+dirty"
-jq -n --arg claude "$HOME/.local/bin/claude" --arg tpl "$tpl" --arg company "${COMPANY_NAME:-}" --arg tz "${TIMEZONE:-UTC}" \
+# cron expressions of the routines (config.env variable named in each agent's "routine.cronEnv")
+crons='{}'
+for v in $(jq -r '[.agents[].routine.cronEnv // empty] | unique[]' "$OUT/org.json"); do
+  crons=$(jq -c --arg k "$v" --arg val "${!v:-}" '. + {($k): $val}' <<<"$crons")
+done
+jq -n --argjson crons "$crons" --arg claude "$HOME/.local/bin/claude" --arg tpl "$tpl" --arg company "${COMPANY_NAME:-}" --arg tz "${TIMEZONE:-UTC}" \
   --argjson hb "${MANAGER_HEARTBEAT_SEC:-0}" --arg extra "${EXTRA_SKILLS:-}" \
   '{claudeCommand:$claude, tpl:$tpl, companyName:$company, timezone:$tz, managerHeartbeatSec:$hb,
-    extraSkills: ($extra | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)))}' > "$OUT/settings.json"
+    routineCrons:$crons, extraSkills: ($extra | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)))}' > "$OUT/settings.json"
 log "desired state written to $OUT ($(jq '.agents|length' "$OUT/org.json") agents, template $tpl)"

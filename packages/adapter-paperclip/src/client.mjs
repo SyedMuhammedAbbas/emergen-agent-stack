@@ -61,6 +61,13 @@ export class Paperclip {
     const cur = await this.instructions(id);
     return this.#call('PUT', `/agents/${id}/instructions-bundle/file`, { path: 'AGENTS.md', content, baseRevisionId: cur?.revisionId ?? null }).then((r) => r.json);
   }
+  // ---- routines (a scheduled issue for an agent: the routine plus its schedule trigger)
+  async routines(cid) { const j = (await this.#call('GET', `/companies/${cid}/routines`)).json; return Array.isArray(j) ? j : (j.items ?? j.routines ?? []); }
+  async routine(id) { const r = await this.#call('GET', `/routines/${id}`, undefined, { allow: [404] }); return r.status === 404 ? null : r.json; }
+  createRoutine(cid, body) { return this.#call('POST', `/companies/${cid}/routines`, body).then((r) => r.json); }
+  patchRoutine(id, body) { return this.#call('PATCH', `/routines/${id}`, body).then((r) => r.json); }
+  createTrigger(rid, body) { return this.#call('POST', `/routines/${rid}/triggers`, body).then((r) => r.json); }
+  patchTrigger(tid, body) { return this.#call('PATCH', `/routine-triggers/${tid}`, body).then((r) => r.json); }
   syncSkills(id, mode, keys) { return this.#call('POST', `/agents/${id}/skills/sync`, { mode, desiredSkills: keys }).then((r) => r.json); }
 
   // ---- read model ---------------------------------------------------------------------------------------------
@@ -105,4 +112,11 @@ export function normaliseAgent(a, { instructions, skillKeys, slugOf, idToKey }) 
     instructionRevisionId: instructions?.revisionId ?? null,
     stack: a.metadata?.stack ?? null, metadata: a.metadata ?? null, status: a.status, updatedAt: a.updatedAt,
   };
+}
+
+/** Pure: a Paperclip routine (with its triggers) -> the projection used by the planner. */
+export function normaliseRoutine(r, idToKey) {
+  const trig = (r.triggers ?? []).find((x) => (x.kind ?? 'schedule') === 'schedule') ?? null;
+  return { id: r.id, title: r.title, description: r.description ?? '', assignee: r.assigneeAgentId ? idToKey(r.assigneeAgentId) : null,
+    cron: trig?.cronExpression, timezone: trig?.timezone, enabled: trig ? trig.enabled !== false : undefined, triggerId: trig?.id ?? null };
 }

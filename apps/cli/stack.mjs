@@ -13,9 +13,10 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { Paperclip } from '../../packages/adapter-paperclip/src/client.mjs';
-import { desiredAgents } from '../../packages/reconciler/src/desired.mjs';
+import { desiredAgents, dropUnavailableSkills } from '../../packages/reconciler/src/desired.mjs';
 import { planAll, matchLive } from '../../packages/reconciler/src/plan.mjs';
 import { applyPlan, rollback, Journal, takeLock } from '../../packages/reconciler/src/apply.mjs';
+import { desiredRoutines, readRoutines, planRoutines, applyRoutines, store as routineStore } from '../../packages/reconciler/src/routines.mjs';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const argv = process.argv.slice(2);
@@ -27,6 +28,7 @@ const api = opt('api', process.env.STACK_API ?? 'http://127.0.0.1:3100');
 const only = opt('only');
 const resolve = flag('take-template') ? 'take-template' : flag('keep-live') ? 'keep-live' : 'ask';
 const log = (s) => console.log(s);
+const warn = (s) => console.error('warning: ' + s);   // stderr, so --json output stays clean
 const die = (s, code = 1) => { console.error(`stack: ${s}`); process.exit(code); };
 
 async function load() {
@@ -34,15 +36,20 @@ async function load() {
   if (!existsSync(join(dd, 'org.json'))) die(`no desired state in ${dd}. Run: stack render`);
   const org = JSON.parse(readFileSync(join(dd, 'org.json'), 'utf8')), settings = JSON.parse(readFileSync(join(dd, 'settings.json'), 'utf8'));
   const instr = Object.fromEntries(readdirSync(join(dd, 'agents')).filter((f) => f.endsWith('.md')).map((f) => [f.slice(0, -3), readFileSync(join(dd, 'agents', f), 'utf8')]));
-  const desired = desiredAgents(org, instr, settings);
+  const wanted = desiredAgents(org, instr, settings);
   const idsFile = join(state, 'ids.json'), ids = existsSync(idsFile) ? JSON.parse(readFileSync(idsFile, 'utf8')) : {};
   const pc = new Paperclip(api);
   try { await pc.health(); } catch (e) { die(`cannot reach Paperclip at ${api} (${e.cause?.code ?? e.message}). Is it running?`); }
   const cid = ids.company ?? (await pc.companies()).find((c) => c.name === settings.companyName)?.id;
   if (!cid) die(`company "${settings.companyName}" not found in Paperclip; run install.ps1 -OnlyOrg once to create it`);
-  const ctx = await pc.context(cid, ids, Object.fromEntries(desired.map((d) => [d.name, d.key])));
+  const ctx = await pc.context(cid, ids, Object.fromEntries(wanted.map((d) => [d.name, d.key])));
+  const { desired, missing } = dropUnavailableSkills(wanted, new Set(ctx.keyOf.keys()));
+  for (const [k, s] of Object.entries(missing)) warn(`${k}: skills not imported into Paperclip yet, ignored: ${s.join(', ')}`);
   const liveList = await pc.readAll(ctx);
-  return { pc, cid, desired, ids, idsFile, ctx, liveList, settings };
+  const rd = desiredRoutines(org, settings), st = routineStore(state);
+  rd.warnings.forEach(warn);
+  const routineLive = await readRoutines(pc, cid, ctx, ids, rd.routines, st.read());
+  return { pc, cid, desired, ids, idsFile, ctx, liveList, settings, routines: rd.routines, routineLive, st };
 }
 
 function describe(f) {
@@ -87,19 +94,23 @@ async function main() {
   }
 
   if (cmd === 'plan' || cmd === 'adopt' || cmd === 'apply') {
-    const { pc, cid, desired, ids, idsFile, ctx, liveList, settings } = await load();
+    const { pc, cid, desired, ids, idsFile, ctx, liveList, settings, routines, routineLive, st } = await load();
     const adopting = cmd === 'adopt';
     const r = adopting ? (resolve === 'ask' ? 'keep-live' : resolve) : resolve;      // adoption keeps what is live unless told otherwise
     let plan = planAll(desired, liveList, ids, { resolve: r });
-    if (adopting) plan = { ...plan, agents: plan.agents.filter((a) => a.action !== 'create' && !liveList.find((l) => l.id === a.id)?.stack) };
-    plan = filterOnly(plan);
-    if (cmd === 'plan') return printPlan(plan, flag('json'));
-
+    let rplan = planRoutines(routines, routineLive, { resolve: r });
     if (adopting) {
-      if (!plan.agents.length) return log('nothing to adopt: every matched agent is already managed');
-      printPlan(plan, false);
-    } else printPlan(plan, false);
-    const writes = plan.agents.some((a) => a.action === 'create' || a.fields.some((f) => f.op === 'update'));
+      plan = { ...plan, agents: plan.agents.filter((a) => a.action !== 'create' && !liveList.find((l) => l.id === a.id)?.stack) };
+      rplan = rplan.filter((a) => a.action !== 'create' && !routineLive.get(a.key)?.stack);
+    }
+    plan = filterOnly(plan); if (only) rplan = rplan.filter((a) => a.key === only);
+    if (cmd === 'plan' && flag('json')) return log(JSON.stringify({ ...plan, routines: rplan }, null, 2));
+    if (cmd === 'plan') { printPlan(plan, false); if (rplan.length) { log('\nroutines:'); printPlan({ agents: rplan, counts: Object.fromEntries([...new Set(rplan.map((x) => x.action))].map((k) => [k, rplan.filter((x) => x.action === k).length])) }, false); } return; }
+
+    if (adopting && !plan.agents.length && !rplan.length) return log('nothing to adopt: every matched agent is already managed');
+    printPlan(plan, false);
+    if (rplan.length) { log('\nroutines:'); printPlan({ agents: rplan, counts: {} }, false); }
+    const writes = [...plan.agents, ...rplan].some((a) => a.action === 'create' || a.fields.some((f) => f.op === 'update'));
     if (!flag('yes')) return log(writes || adopting ? '\nNothing was changed. Re-run with --yes to apply.' : '');
     if (plan.agents.some((a) => a.action === 'needs-decision')) log('\nAgents marked DECIDE are skipped. Choose with --keep-live or --take-template (or --only <key>).');
 
@@ -111,8 +122,11 @@ async function main() {
       journal.add({ t: 'start', cmd, api, tpl: settings.tpl });
       const res = await applyPlan({ pc, cid, desired, live, plan, ctx, journal, tpl: settings.tpl, log });
       for (const d of desired) { const id = live.get(d.key)?.id ?? res.createdIds[d.key]; if (id) ids[d.key] = id; }   // keep ids.json (used by Hermes) in step
+      const agentId = (k) => live.get(k)?.id ?? res.createdIds[k];
+      const rr = await applyRoutines({ pc, cid, desired: routines, liveMap: routineLive, plan: rplan, agentId, ctx, journal, st, tpl: settings.tpl, log });
+      ids.routines = { ...(ids.routines ?? {}), ...Object.fromEntries(Object.entries(st.read()).map(([k, v]) => [k, { id: v.id, trigger: v.trigger }])) };   // same shape 40-org.sh wrote
       ids.company = cid; writeFileSync(idsFile, JSON.stringify(ids, null, 2));
-      log(`\n${res.created.length} created, ${res.wrote.length} updated, ${res.recorded.length} recorded, ${res.skipped.length} skipped. Journal: ${dir}`);
+      log(`\nagents: ${res.created.length} created, ${res.wrote.length} updated, ${res.recorded.length} recorded, ${res.skipped.length} skipped. routines: ${rr.created.length} created, ${rr.wrote.length} updated, ${rr.skipped.length} skipped. Journal: ${dir}`);
     } catch (e) {
       console.error(`\nstack: stopped: ${e.message}\nJournal: ${dir}\nUndo what was written so far with: stack rollback ${dir.split(/[\\/]/).pop()}`);
       process.exitCode = 1;
@@ -125,9 +139,9 @@ async function main() {
     const names = existsSync(jdir) ? readdirSync(jdir).filter((n) => !existsSync(join(jdir, n, 'ROLLED_BACK'))).sort() : [];
     const pick = which === 'latest' ? names.at(-1) : which;
     if (!pick) die('no journal to roll back');
-    const { pc, cid, ctx } = await load();
+    const { pc, cid, ctx, st } = await load();
     const release = takeLock(join(state, 'lock'));
-    try { const { warnings } = await rollback({ pc, cid, dir: join(jdir, pick), ctx, log }); warnings.forEach((w) => log(`warning: ${w}`)); log(`rolled back ${pick}`); }
+    try { const { warnings } = await rollback({ pc, cid, dir: join(jdir, pick), ctx, st, log }); warnings.forEach((w) => log(`warning: ${w}`)); log(`rolled back ${pick}`); }
     finally { release(); }
     return;
   }

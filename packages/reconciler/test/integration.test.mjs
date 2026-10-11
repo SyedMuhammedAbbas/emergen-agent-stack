@@ -146,3 +146,32 @@ test('no delete path exists in the adapter or the CLI', () => {
     assert.doesNotMatch(readFileSync(join(root, f), 'utf8'), /['"`]DELETE['"`]/, `${f} must not issue DELETE`);
   }
 });
+
+test('routines: created with their schedule, edits kept, template changes applied and rolled back', T, async () => {
+  const co = (await http('POST', '/companies', { name: cname + '-routine' })).id;
+  const st = mkdtempSync(join(tmpdir(), 'stack-it3-')); mkdirSync(join(st, 'desired', 'agents'), { recursive: true });
+  const o = org(); o.agents = [{ ...o.agents[0], routine: { title: 'Daily report', cronEnv: 'CRON1', description: 'Write the report.' } }];
+  const put = (cron, tz = 'UTC') => {
+    writeFileSync(join(st, 'desired', 'org.json'), JSON.stringify(o));
+    writeFileSync(join(st, 'desired', 'settings.json'), JSON.stringify({ ...settings(), companyName: cname + '-routine', timezone: tz, routineCrons: { CRON1: cron } }));
+    writeFileSync(join(st, 'desired', 'agents', 'manager.md'), 'You manage.\n');
+  };
+  const run = (args, env = {}) => { const r = spawnSync(process.execPath, [cli, ...args, '--api', origin, '--state', st], { encoding: 'utf8', env: { ...process.env, ...env } }); return { code: r.status, out: r.stdout + r.stderr, stdout: r.stdout }; };
+  const routineOf = async () => { const l = (await http('GET', `/companies/${co}/routines`)); const r = (Array.isArray(l) ? l : l.items).find((x) => x.title === 'Daily report'); return r ? http('GET', `/routines/${r.id}`) : null; };
+
+  put('0 9 * * 1-5');
+  const first = run(['apply', '--yes']); assert.equal(first.code, 0, first.out);
+  let r = await routineOf(); assert.equal(r.triggers[0].cronExpression, '0 9 * * 1-5'); assert.equal(r.triggers[0].timezone, 'UTC');
+  assert.equal(r.assigneeAgentId, (await http('GET', `/companies/${co}/agents`))[0].id);
+
+  const p = JSON.parse(run(['plan', '--json']).stdout); assert.deepEqual(p.routines.map((x) => x.action), ['noop']);
+  const stamp = (await routineOf()).updatedAt; assert.equal(run(['apply', '--yes']).code, 0); assert.equal((await routineOf()).updatedAt, stamp);   // idempotent
+
+  await http('PATCH', `/routine-triggers/${r.triggers[0].id}`, { cronExpression: '0 7 * * *' });                // a person changes the schedule in the UI
+  assert.equal(run(['apply', '--yes']).code, 0); assert.equal((await routineOf()).triggers[0].cronExpression, '0 7 * * *');   // kept
+
+  await http('PATCH', `/routine-triggers/${r.triggers[0].id}`, { cronExpression: '0 9 * * 1-5' });             // back to what we wrote
+  put('0 18 * * 1-5');                                                                                         // the template moves
+  assert.equal(run(['apply', '--yes']).code, 0); assert.equal((await routineOf()).triggers[0].cronExpression, '0 18 * * 1-5');
+  assert.equal(run(['rollback']).code, 0); assert.equal((await routineOf()).triggers[0].cronExpression, '0 9 * * 1-5');   // undone
+});
