@@ -7,6 +7,9 @@ import { moodOf, summariseRuns, projectMonth, readPaperclip } from '../src/paper
 import { deriveNeeds, headline } from '../src/needs.mjs';
 import { createStore } from '../src/state.mjs';
 import { createServer } from '../server.mjs';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // ---- captured from this PC (spikes/m2-step0.mjs) ----
 const SYSTEMD = `Id=paperclipai.service
@@ -141,7 +144,7 @@ test('needs carry a fix only when the server would allow that action', () => {
 test('the store caches, coalesces concurrent refreshes, and builds the spend view', async () => {
   let reads = 0, t = new Date(2026, 9, 11, 21, 0, 0);
   const io = { exec: async (c, a) => { if (a[0] === '-l') { reads++; return { stdout: 'Ubuntu-24.04\n' }; } return c === 'wsl.exe' ? { stdout: SYSTEMD } : { stdout: SCHT }; }, fetch: async (u) => (String(u).includes('/api/companies') ? fakePaperclip()(u) : { status: 200 }), diskFreeGB: () => 80 };
-  const s = createStore({ settings: { distro: 'Ubuntu-24.04', paperclip: 'http://x', budgetUsd: 100, alertAt: 0.8 }, io, ttlMs: 5000, now: () => t });
+  const s = createStore({ settings: { distro: 'Ubuntu-24.04', paperclip: 'http://x', budgetUsd: 100, alertAt: 0.8, appDir: mkdtempSync(join(tmpdir(), 'app-')) }, io, ttlMs: 5000, now: () => t });
   const [a, b] = await Promise.all([s.get(), s.get()]); assert.equal(reads, 1); assert.equal(a, b);
   await s.get(); assert.equal(reads, 1);                                             // fresh: served from cache
   t = new Date(+t + 6000); await s.get(); assert.equal(reads, 2);                    // stale: new reading

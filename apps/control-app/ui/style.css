@@ -151,6 +151,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 /* cost chart */
 .bars{display:flex;align-items:flex-end;gap:5px;height:120px;margin-top:6px}
 .bars div{flex:1;min-width:0;display:flex;flex-direction:column-reverse;gap:1px;height:100%}
+.bars div{border-bottom:1px solid var(--line)}
 .bars i{display:block;border-radius:2px 2px 0 0}
 .bars .sub-i{background:repeating-linear-gradient(135deg,var(--ink-3) 0 2px,transparent 2px 5px);opacity:.7}
 .bars .api-i{background:var(--clay)}

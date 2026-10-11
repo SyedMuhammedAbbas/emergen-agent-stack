@@ -7,6 +7,8 @@ import { diskFreeGB } from './probes.mjs';
 import { deriveNeeds, headline } from './needs.mjs';
 import { CONTROL } from './actions.mjs';
 import { LOG_UNITS } from './logs.mjs';
+import { appDirOf } from './audit.mjs';
+import { loadCache, saveCache, mergeRuns, buildCost, buildActivity } from './costs.mjs';
 
 export const DEFAULTS = { distro: 'Ubuntu-24.04', paperclip: 'http://127.0.0.1:3100', budgetUsd: 100, alertAt: 0.8, companyName: undefined };
 
@@ -22,21 +24,37 @@ export function loadSettings({ appDir = join(process.env.LOCALAPPDATA ?? '.', 'A
 
 export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new Date() }) {
   let latest = null, inflight = null; const started = now().toISOString();
+  const cacheFile = join(settings.appDir ?? appDirOf(settings), 'cost-cache.json'), cache = loadCache(cacheFile); cache.agents ??= {}; let sig = '';
+  const titling = new Set();
+  // task titles for finished runs, fetched a few at a time in the background (never delays a reading)
+  async function fillTitles(fetch) {
+    const todo = Object.values(cache.runs).filter((r) => cache.titles[r.id] === undefined && r.status !== 'running' && r.status !== 'queued' && !titling.has(r.id)).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 12);
+    await Promise.all(todo.map(async (r) => { titling.add(r.id); try { const res = await fetch(`${settings.paperclip}/api/heartbeat-runs/${r.id}/issues`, { signal: AbortSignal.timeout(3000) }); if (res.ok) { const l = await res.json(); const i = Array.isArray(l) ? l[0] : null; cache.titles[r.id] = i ? [i.identifier, i.title].filter(Boolean).join(' ') : ''; } } catch { /* try again next time */ } finally { titling.delete(r.id); } }));
+    saveCache(cacheFile, cache);
+  }
   async function build() {
     const [rawServices, paperclip] = await Promise.all([readServices(settings, io), readPaperclip(settings.paperclip, { fetch: io.fetch, now: now(), companyName: settings.companyName })]);
     // what the UI may offer for each service (the server enforces the same list)
     const services = rawServices.map((x) => ({ ...x, actions: CONTROL[x.id]?.actions ?? [], hasLogs: Boolean(LOG_UNITS[x.id]) || ['keepalive', 'hermes'].includes(x.id) }));
     const disk = (io.diskFreeGB ?? diskFreeGB)();
-    const needs = deriveNeeds({ services, paperclip, diskFreeGB: disk });
-    const month = paperclip.runs?.monthUsd ?? 0;
+    // spend and activity from the persistent run ledger (Paperclip's list is merged into it; history survives if the list is trimmed)
+    const nowD = now();
+    if (paperclip.raw) { for (const a of paperclip.raw.agents) cache.agents[a.id] = a.name; mergeRuns(cache, paperclip.raw.runs); }
+    const nsig = Object.values(cache.runs).map((r) => r.id + r.status + r.usd).join('|') + JSON.stringify(cache.agents);
+    if (nsig !== sig) { sig = nsig; saveCache(cacheFile, cache); }
+    if (paperclip.up) fillTitles(io.fetch ?? fetch).catch(() => {});
+    const byId = new Map(Object.entries(cache.agents).map(([id, name]) => [id, { name }]));
+    const cost = buildCost(cache, byId, nowD, { budgetUsd: settings.budgetUsd, alertAt: settings.alertAt });
+    const activity = buildActivity(cache, byId, paperclip.raw?.approvals ?? [], 40);
+    const spend = { monthUsd: cost.totalUsd, apiUsd: cost.apiUsd, subscriptionUsd: cost.subscriptionUsd, budgetUsd: settings.budgetUsd, alertAt: settings.alertAt, pct: cost.budget.pct, level: cost.budget.level, projectedUsd: cost.projectedUsd };
+    const needs = deriveNeeds({ services, paperclip, diskFreeGB: disk, spend });
     return {
       checkedAt: now().toISOString(), startedAt: started,
       headline: headline(services, needs), needs, services,
       paperclip: { up: paperclip.up, error: paperclip.error, company: paperclip.company?.name ?? null },
       crew: paperclip.crew ?? [], recent: paperclip.recent ?? [], approvalsPending: paperclip.approvalsPending ?? 0,
-      runs: paperclip.runs ? { today: paperclip.runs.runsToday, month: paperclip.runs.runsThisMonth } : null,
-      spend: paperclip.runs ? { monthUsd: month, apiUsd: paperclip.runs.apiUsd, subscriptionUsd: paperclip.runs.subscriptionUsd, budgetUsd: settings.budgetUsd, alertAt: settings.alertAt,
-        pct: Math.min(100, Math.round((month / settings.budgetUsd) * 1000) / 10), projectedUsd: projectMonth(month, now()) } : null,
+      runs: { today: cost.days.at(-1)?.runs ?? 0, month: cost.month.runs },
+      spend, cost, activity,
       disk: { cFreeGB: disk },
     };
   }

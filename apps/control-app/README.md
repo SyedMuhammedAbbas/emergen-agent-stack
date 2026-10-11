@@ -1,6 +1,6 @@
 # Agent Stack control app
 
-Status page for the stack: are the services running, what is it costing, what needs you. **Version 0.2** (M2.1 Home and Services, M2.3 service control). Everything on Home is read-only; the only things it can change are starting, stopping and restarting the services listed below. Design: [docs/architecture/15-m2-design.md](../../docs/architecture/15-m2-design.md); plan: [14-m2-plan.md](../../docs/architecture/14-m2-plan.md).
+Status page for the stack: are the services running, what is it costing, what needs you. **Version 0.3** (Home, Services with control, Cost, Activity). Everything on Home is read-only; the only things it can change are starting, stopping and restarting the services listed below. Design: [docs/architecture/15-m2-design.md](../../docs/architecture/15-m2-design.md); plan: [14-m2-plan.md](../../docs/architecture/14-m2-plan.md).
 
 ```
 app.cmd                      (repo root) starts it and opens your browser
@@ -19,6 +19,10 @@ It runs on **Windows** (so it can still report when WSL is down), listens on `12
 | Keepalive, Hermes tasks | `schtasks /query` (no admin) | ~30 ms |
 | Crew, runs, spend, approvals | Paperclip API (`/agents`, `/heartbeat-runs`, `/approvals`) | ~20 ms |
 | C: free space | `statfs` | instant |
+
+## Cost and Activity
+
+Both come from Paperclip's runs, kept in a small ledger (`%LOCALAPPDATA%\AgentStack\cost-cache.json`) so a month's history survives if Paperclip ever trims its run list. Cost shows the month against your budget (default $100, alert at 80%, and a need appears on Home when you pass the line), a stacked daily chart (API-billed vs subscription-covered), spend by agent and by model, and token totals. Activity lists runs and approvals, newest first, with the task title when the run belongs to a task (fetched in the background), and filters by agent and status.
 
 Spend is summed from each run's `usageJson.costUsd` (what it would cost at API prices), split into API-billed and subscription-covered, because Paperclip's own summary shows $0 for subscription runs.
 
@@ -41,7 +45,7 @@ Spend is summed from each run's `usageJson.costUsd` (what it would cost at API p
 ## Tests
 
 ```
-node --test apps/control-app/test/app.test.mjs apps/control-app/test/actions.test.mjs
+node --test apps/control-app/test/app.test.mjs apps/control-app/test/actions.test.mjs apps/control-app/test/costs.test.mjs
 node apps/control-app/dev/fixture-server.mjs      # the real UI on synthetic problem states (ok, svc, wsl, paperclip)
 ```
 

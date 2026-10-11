@@ -58,7 +58,7 @@ function crewCard() {
 }
 function recentCard() {
   const word = { succeeded: ['ok', 'Succeeded'], failed: ['fail', 'Failed'], running: ['ok', 'Working'], queued: ['idle', 'Queued'], cancelled: ['off', 'Cancelled'] };
-  const rows = S.recent.map((r) => { const [k, t] = word[r.status] ?? ['off', r.status]; return `<div class="row" style="grid-template-columns:48px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1.5fr)"><span style="width:42px">${crabSvg(r.agent, r.status === 'running' ? 'working' : r.status === 'failed' ? 'error' : 'idle')}</span><span><span class="t">${esc(r.agent)}</span></span><span>${lamp(k === 'idle' ? 'off' : k, t)}</span><span class="s mono-s" style="text-align:right">${ago(r.at)}${r.costUsd != null ? `<br>${usd(r.costUsd)}${r.subscription ? ' · subscription' : ''}` : ''}</span></div>`; }).join('');
+  const rows = S.recent.map((r) => { const [k, t] = word[r.status] ?? ['off', r.status]; return `<div class="row" style="grid-template-columns:48px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1.5fr)"><span style="width:42px">${crabSvg(r.agent, r.status === 'running' ? 'working' : r.status === 'failed' ? 'error' : 'idle')}</span><span><span class="t">${esc(r.agent)}</span></span><span>${lamp(k === 'idle' ? 'off' : k, t)}</span><span class="s mono-s" style="text-align:right;white-space:nowrap">${ago(r.at)}${r.costUsd != null ? `<br>${usd(r.costUsd)}${r.subscription ? ' · subscription' : ''}` : ''}</span></div>`; }).join('');
   return `<section class="card flush" aria-labelledby="h-act"><div style="padding:18px 18px 4px"><h2 id="h-act">Recent runs</h2></div>${rows ? `<div class="rows">${rows}</div>` : '<p class="hint" style="padding:0 18px 18px">No runs yet.</p>'}</section>`;
 }
 function home() {
@@ -154,8 +154,49 @@ function services() {
   <div class="grid g2" style="margin-top:16px">${doctorCard()}${auditCard()}</div>`;
 }
 
+// ---- Cost and Activity (M2.4) ----
+const kfmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n ?? 0));
+const FILTER = { agent: '', status: '' };
+function cost() {
+  const c = S.cost;
+  if (!c) return '<h1>Cost</h1><p class="hint">Not available yet.</p>';
+  const max = Math.max(0.0001, ...c.days.map((d) => d.apiUsd + d.subscriptionUsd)), mon = new Date().toLocaleString('en', { month: 'short' });
+  const bar = (d) => { const h = (v) => (v ? Math.max(3, (v / max) * 100) : 0); return `<div title="${mon} ${d.day}: ${usd(d.apiUsd + d.subscriptionUsd)}, ${d.runs} run${d.runs === 1 ? '' : 's'}"><i class="sub-i" style="height:${h(d.subscriptionUsd)}%"></i><i class="api-i" style="height:${h(d.apiUsd)}%"></i></div>`; };
+  const top = Math.max(0.0001, c.byAgent[0]?.usd ?? 0);
+  const note = c.budget.level === 'ok' ? '' : `<p class="why" style="color:var(--${c.budget.level === 'fail' ? 'fail' : 'warn'});margin:10px 0 0"><b>${c.budget.level === 'fail' ? 'Over budget.' : 'Past the alert line.'}</b> ${usd(c.totalUsd)} of $${c.budget.usd}.</p>`;
+  return `<h1>Cost</h1><p class="sub">${esc(c.month.label)}, from every agent run. Subscription runs cost nothing extra, but they are counted at API prices so you can see the load.</p>
+  <div class="grid g2">
+    <section class="card" aria-labelledby="h-m"><h2 id="h-m">This month</h2>
+      <div><span class="big">${usd(c.totalUsd)}</span> <span class="of">of $${c.budget.usd}</span></div>
+      <div class="meter" role="img" aria-label="${c.budget.pct} percent of the monthly budget used; alert at ${Math.round(c.budget.alertAt * 100)} percent"><span style="width:${Math.min(100, c.budget.pct)}%"></span><em style="left:${c.budget.alertAt * 100}%"></em></div>
+      <div class="legend"><span><i style="background:var(--clay)"></i>Billed to API <b class="mono">${usd(c.apiUsd)}</b></span><span><i style="background:repeating-linear-gradient(135deg,var(--ink-3) 0 2px,transparent 2px 5px)"></i>Covered by subscriptions <b class="mono">${usd(c.subscriptionUsd)}</b></span></div>
+      ${c.totalUsd || c.month.runs ? `<div class="bars" role="img" aria-label="Spend per day this month">${c.days.map(bar).join('')}</div><div class="axis"><span>1 ${mon}</span><span>${c.month.day} ${mon}</span></div>` : '<p class="hint" style="margin-top:14px">No runs yet this month.</p>'}
+      <p class="tiles-note">${c.projectedUsd == null ? 'Too early in the month for a projection.' : `On pace for about $${c.projectedUsd} by the end of the month.`} ${c.month.runs} run${c.month.runs === 1 ? '' : 's'} so far.</p>${note}</section>
+    <section class="card flush" aria-labelledby="h-a"><div style="padding:18px 18px 4px"><h2 id="h-a">By agent</h2></div>
+      ${c.byAgent.length ? `<div class="rows">${c.byAgent.map((a) => `<div class="row" style="grid-template-columns:48px minmax(0,1.4fr) minmax(0,1.6fr) auto"><span style="width:42px">${crabSvg(a.name, 'idle')}</span><span><span class="t">${esc(a.name)}</span><br><span class="s">${a.runs} run${a.runs === 1 ? '' : 's'}</span></span><span class="meter" style="margin:0" role="img" aria-label="${usd(a.usd)}"><span style="width:${(a.usd / top) * 100}%"></span></span><span class="mono">${usd(a.usd)}</span></div>`).join('')}</div>` : '<p class="hint" style="padding:0 18px 18px">No spend yet.</p>'}</section>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <section class="card flush" aria-labelledby="h-mo"><div style="padding:18px 18px 4px"><h2 id="h-mo">By model</h2></div>${c.byModel.length ? `<div class="rows">${c.byModel.map((m) => `<div class="row" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto"><span class="mono-s">${esc(m.model)}</span><span class="s">${m.runs} run${m.runs === 1 ? '' : 's'}</span><span class="mono">${usd(m.usd)}</span></div>`).join('')}</div>` : '<p class="hint" style="padding:0 18px 18px">No spend yet.</p>'}</section>
+    <section class="card" aria-labelledby="h-tk"><h2 id="h-tk">Tokens this month</h2><p style="margin:0"><span class="mono">${kfmt(c.tokens.in)}</span> input · <span class="mono">${kfmt(c.tokens.cached)}</span> read from cache · <span class="mono">${kfmt(c.tokens.out)}</span> output</p>
+      <p class="tiles-note">Dollar figures are what Claude reports for each run. Paperclip's own cost summary shows $0 for subscription runs, which is why this page adds the runs up itself.</p></section>
+  </div>`;
+}
+
+function activity() {
+  const all = S.activity ?? [], agents = [...new Set(all.map((i) => i.agent).filter(Boolean))].sort();
+  const stat = (i) => (i.kind === 'approval' ? (i.status === 'pending' ? ['warn', 'Needs approval'] : i.status === 'approved' ? ['ok', 'Approved'] : i.status === 'rejected' ? ['fail', 'Rejected'] : ['off', i.status])
+    : ({ succeeded: ['ok', 'Succeeded'], failed: ['fail', 'Failed'], running: ['ok', 'Working'], queued: ['off', 'Queued'], cancelled: ['off', 'Cancelled'] }[i.status] ?? ['off', i.status]));
+  const items = all.filter((i) => (!FILTER.agent || i.agent === FILTER.agent) && (!FILTER.status || (FILTER.status === 'approval' ? i.kind === 'approval' : i.kind === 'run' && i.status === FILTER.status)));
+  const rows = items.map((i) => { const [k, t] = stat(i); const title = i.title || (i.kind === 'approval' ? 'Approval' : i.wake ? `Run: ${i.wake}` : 'Run'); return `<div class="row" style="grid-template-columns:48px minmax(0,2fr) minmax(0,1fr) minmax(0,1.8fr)"><span style="width:42px">${i.agent ? crabSvg(i.agent, i.status === 'running' ? 'working' : i.status === 'failed' ? 'error' : 'idle') : ''}</span><span><span class="t">${esc(title)}</span><br><span class="s">${esc(i.agent ?? '')}${i.kind === 'approval' ? ' · approval' : ''}</span></span><span>${lamp(k, t)}</span><span class="s mono-s" style="text-align:right;white-space:nowrap">${ago(i.at)}${i.usd != null ? `<br>${usd(i.usd)}${i.billing === 'subscription' ? ' · subscription' : ''}` : ''}</span></div>`; }).join('');
+  const sel = (name, label, opts) => `<label class="s" style="display:flex;align-items:center;gap:8px">${label}<select data-filter="${name}" style="font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 8px">${opts.map(([v, t]) => `<option value="${esc(v)}" ${FILTER[name] === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+  return `<h1>Activity</h1><p class="sub">Runs and approvals across all agents, newest first. Open Paperclip for the full task.</p>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin:0 0 14px">${sel('agent', 'Agent', [['', 'All agents'], ...agents.map((a) => [a, a])])}${sel('status', 'Show', [['', 'Everything'], ['succeeded', 'Succeeded'], ['failed', 'Failed'], ['running', 'Working'], ['cancelled', 'Cancelled'], ['approval', 'Approvals']])}</div>
+  <div class="card flush">${rows ? `<div class="rows">${rows}</div>` : `<p class="hint" style="padding:18px">${all.length ? 'Nothing matches these filters.' : 'No runs or approvals yet.'}</p>`}</div>`;
+}
+
 // ---- shell ----
-const ROUTES = { home: ['Home', home, 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'], services: ['Services', services, 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6'] };
+const ROUTES = { home: ['Home', home, 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'], services: ['Services', services, 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6'],
+  cost: ['Cost', cost, 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.3 5 3.3-2.2 3-5 3-5-1.1-5-3'], activity: ['Activity', activity, 'M3 12h4l3-8 4 16 3-8h4'] };
 const icon = (p) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${p}"/></svg>`;
 const route = () => { const h = (location.hash.replace(/^#\/?/, '') || 'home').split('/')[0]; return ROUTES[h] ? h : 'home'; };
 
@@ -184,6 +225,7 @@ async function load() {
 
 function applyTheme() { document.documentElement.dataset.theme = THEME || ''; const dark = THEME === 'dark' || (!THEME && matchMedia('(prefers-color-scheme:dark)').matches); $('theme').textContent = dark ? 'Light mode' : 'Dark mode'; }
 $('theme').onclick = () => { const dark = document.documentElement.dataset.theme === 'dark' || (!THEME && matchMedia('(prefers-color-scheme:dark)').matches); THEME = dark ? 'light' : 'dark'; try { localStorage.setItem('theme', THEME); } catch { /* ignore */ } applyTheme(); };
+document.addEventListener('change', (e) => { const f = e.target.dataset?.filter; if (f) { FILTER[f] = e.target.value; paint(); } });
 addEventListener('hashchange', () => { paint(); scrollTo(0, 0); });
 $('logo').innerHTML = crab('Manager', 'working');
 $('railclock').textContent = 'v0.1';

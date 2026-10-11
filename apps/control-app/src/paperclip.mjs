@@ -49,10 +49,11 @@ export async function readPaperclip(origin, { fetch = real.fetch, now = new Date
     const company = companies.find((c) => c.name === companyName) ?? companies[0];
     if (!company) return { up: true, company: null };
     const base = `/companies/${company.id}`;
-    const [agents, runs, approvals] = await Promise.all([get(`${base}/agents`), get(`${base}/heartbeat-runs`), get(`${base}/approvals?status=pending`).catch(() => [])]);
+    const [agents, runs, approvals, approvalsAll] = await Promise.all([get(`${base}/agents`), get(`${base}/heartbeat-runs`), get(`${base}/approvals?status=pending`).catch(() => []), get(`${base}/approvals`).catch(() => [])]);
     const byId = new Map(agents.map((a) => [a.id, a]));
     const crew = agents.map((a) => ({ id: a.id, name: a.name, title: a.title ?? '', mood: moodOf(a.status), status: a.status, plan: a.metadata?.stack ? 'managed' : 'unmanaged' }))
       .sort((p, q) => p.name.localeCompare(q.name));
-    return { up: true, company: { id: company.id, name: company.name }, crew, runs: summariseRuns(runs, now), recent: recentRuns(runs, byId), approvalsPending: Array.isArray(approvals) ? approvals.length : 0 };
+    return { up: true, company: { id: company.id, name: company.name }, crew, runs: summariseRuns(runs, now), recent: recentRuns(runs, byId), approvalsPending: Array.isArray(approvals) ? approvals.length : 0,
+      raw: { agents, runs, approvals: Array.isArray(approvalsAll) ? approvalsAll : [] } };
   } catch (e) { return { up: false, error: String(e.message).slice(0, 120) }; }
 }
