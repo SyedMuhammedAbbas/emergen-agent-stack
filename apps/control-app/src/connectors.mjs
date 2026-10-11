@@ -18,6 +18,7 @@ export const STATUS_SCRIPT = `${PATHFIX}
 echo '#mcp'; claude mcp list 2>&1
 echo '#bin'; IFS=, read -ra B <<<"$1"; for b in "\${B[@]}"; do [ -n "$b" ] && { command -v "$b" >/dev/null 2>&1 && echo "$b=1" || echo "$b=0"; }; done
 echo '#gh'; if command -v gh >/dev/null 2>&1; then gh auth status >/dev/null 2>&1 && echo 1 || echo 0; else echo 0; fi
+echo '#omni'; jq -r '.surfaces.anthropic.fast.url // ""' "$HOME/.config/jev-router/config.json" 2>/dev/null | grep -q ':20128' && echo 1 || echo 0
 echo '#secrets'; IFS=, read -ra S <<<"$2"; for s in "\${S[@]}"; do [ -n "$s" ] && { [ -f "$HOME/.agent-stack/secrets/$s" ] && echo "$s=1" || echo "$s=0"; }; done`;
 
 export function parseMcpList(stdout) {
@@ -51,8 +52,8 @@ export function buildView(connectors, obs) {
     const steps = c.steps.map((s) => {
       let state = 'todo';
       if (s.kind === 'info') state = 'info';
-      else if (s.kind === 'action') state = s.do === 'register-mcp' ? (entry && entry.status !== 'not-configured' ? 'done' : 'todo') : (policyServers.has(server) ? 'done' : 'todo');
-      else if (s.kind === 'check') state = ({ 'mcp-status': status === 'connected' || status === 'active', binary: bins[k.binary], 'gh-auth': obs.ghAuth, health: obs.health?.[c.id], 'secret-file': secrets[s.secret], 'policy-synced': policyServers.has(server) })[s.check] ? 'done' : 'todo';
+      else if (s.kind === 'action') state = s.do === 'register-mcp' ? (entry && entry.status !== 'not-configured' ? 'done' : 'todo') : s.do === 'wire-omniroute' ? (obs.omniWired ? 'done' : 'todo') : (policyServers.has(server) ? 'done' : 'todo');
+      else if (s.kind === 'check') state = ({ 'mcp-status': status === 'connected' || status === 'active', binary: bins[k.binary], 'gh-auth': obs.ghAuth, health: obs.health?.[c.id], 'secret-file': secrets[s.secret], 'policy-synced': policyServers.has(server), 'omniroute-wired': obs.omniWired })[s.check] ? 'done' : 'todo';
       else if (s.kind === 'manual') state = progress[s.id] || (s.id === 'sign-in' && (status === 'connected' || status === 'active')) ? 'done' : 'todo';
       return { id: s.id, kind: s.kind, title: s.title, text: s.text ?? '', link: s.link ?? null, do: s.do ?? null, check: s.check ?? null, confirmThirdParty: s.do === 'register-mcp' && k.type === 'mcp-stdio', state };
     });
@@ -76,7 +77,7 @@ export function createConnectors({ repo, settings, audit, appDir, exec = real.ex
     const health = {};
     await Promise.all(connectors.filter((c) => c.connect.type === 'local-service').map(async (c) => { health[c.id] = (await httpProbe(c.connect.health, { fetch })).ok; }));
     const tools = getTools();
-    const obs = { mcp, bins: flags(sec.bin ?? []), ghAuth: (sec.gh ?? [])[0]?.trim() === '1', secrets: flags(sec.secrets ?? []), health, progress,
+    const obs = { mcp, bins: flags(sec.bin ?? []), ghAuth: (sec.gh ?? [])[0]?.trim() === '1', omniWired: (sec.omni ?? [])[0]?.trim() === '1', secrets: flags(sec.secrets ?? []), health, progress,
       policyServers: (tools?.integrations ?? []).map((i) => i.server), activity: (tools?.integrations ?? []).map((i) => ({ server: i.server, calls24h: i.calls24h, blocked24h: i.blocked24h, errors24h: i.errors24h, lastAt: i.lastAt })) };
     const known = new Set(connectors.filter((c) => c.connect.server).map((c) => c.connect.server));
     const found = mcp.filter((m) => !known.has(m.name) && m.status !== 'not-configured').map((m) => ({ name: m.name, url: m.url, status: m.status, activity: (tools?.unlisted ?? []).find((u) => u.server === norm(m.name))?.calls24h ?? 0 }));
@@ -96,7 +97,7 @@ export function createConnectors({ repo, settings, audit, appDir, exec = real.ex
       audit?.add({ service: 'connector', action: `${op}:${c.id}:${s.id}`, ok: true }); return { status: 200, ok: true };
     }
     if (op !== 'run' || s.kind !== 'action') return { status: 400, error: 'That step does not run anything.' };
-    const k = c.connect, t0 = Date.now();
+    const k = c.connect, t0 = Date.now(); let output = null;
     try {
       if (s.do === 'register-mcp') {
         if (k.type === 'mcp-http') await wsl(`${PATHFIX}; exec claude mcp add --transport http --scope user "$@"`, k.server, k.url);
@@ -108,13 +109,16 @@ while [ $# -gt 0 ] && [ "$1" != "--" ]; do envs+=(-e "$1=$(cat "$HOME/.agent-sta
 shift; exec claude mcp add --scope user "$name" "\${envs[@]}" -- npx -y "$pkg" "$@"`;
           await wsl(script, k.server, k.package, ...(k.env ?? []), '--', ...(k.args ?? []));
         } else return { status: 400, error: 'This tool is not an MCP server.' };
+      } else if (s.do === 'wire-omniroute') {
+        const r = await exec('wsl.exe', ['-d', settings.distro, '--exec', 'bash', '-c', 'bash "$1/wsl/46-omniroute-wire.sh" 2>&1', '_', toWslPath(repo)], { timeout: 120000, maxBuffer: 1024 * 1024 });
+        output = redact(String(r.stdout)).slice(-700);
       } else if (s.do === 'sync-policy') {
         await wsl('source ~/.nvm/nvm.sh >/dev/null 2>&1; cd "$1" && node apps/cli/stack.mjs integrations sync', toWslPath(repo));
       }
       audit?.add({ service: 'connector', action: `${s.do}:${c.id}`, ok: true, ms: Date.now() - t0 });
-      return { status: 200, ok: true };
+      return { status: 200, ok: true, ...(output ? { output } : {}) };
     } catch (e) {
-      const msg = redact(String(e.stderr || e.stdout || e.message)).replace(/\s+/g, ' ').slice(0, 300);
+      const msg = redact(String(e.stdout || e.stderr || e.message)).replace(/\s+/g, ' ').slice(0, 300);
       audit?.add({ service: 'connector', action: `${s.do}:${c.id}`, ok: false, error: msg, ms: Date.now() - t0 });
       return { status: 502, error: msg || 'The step failed.' };
     }

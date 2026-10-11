@@ -304,8 +304,8 @@ const STATE_LAMP = { 'not-set-up': 'off', 'needs-sign-in': 'warn', connected: 'o
 function catalogue() {
   const c = S.connectors;
   if (!c) return '<section class="card"><h2>Tools you can connect</h2><p class="hint">Reading the catalogue (this takes a few seconds)…</p></section>';
-  const label = (x) => (x.status === 'not-set-up' ? 'Set up' : x.status === 'needs-sign-in' ? 'Finish setup' : 'Open');
-  const cards = c.connectors.map((x) => `<button class="tile" type="button" data-conn="${esc(x.id)}" style="text-align:left;align-items:flex-start"><span style="display:flex;justify-content:space-between;gap:8px;width:100%;align-items:center"><b>${esc(x.name)}</b>${lamp(STATE_LAMP[x.status] ?? 'off', x.statusText)}</span><span class="s">${esc(x.summary)}</span><span class="s mono-s">${x.roles.length ? 'Used by ' + esc(x.roles.map(prettyRole).join(', ')) : 'Available to any agent'}</span><span class="btn small ${x.status === 'not-set-up' || x.status === 'needs-sign-in' ? 'primary' : ''}" style="pointer-events:none">${label(x)}</span></button>`).join('');
+  const label = (x) => (x.status === 'not-set-up' ? 'Set up' : x.status === 'needs-sign-in' || x.currentStep ? 'Finish setup' : 'Open');
+  const cards = c.connectors.map((x) => `<button class="tile" type="button" data-conn="${esc(x.id)}" style="text-align:left;align-items:flex-start"><span style="display:flex;justify-content:space-between;gap:8px;width:100%;align-items:center"><b>${esc(x.name)}</b>${lamp(STATE_LAMP[x.status] ?? 'off', x.statusText)}</span><span class="s">${esc(x.summary)}</span><span class="s mono-s">${x.roles.length ? 'Used by ' + esc(x.roles.map(prettyRole).join(', ')) : 'Available to any agent'}</span><span class="btn small ${x.status === 'not-set-up' || x.status === 'needs-sign-in' || x.currentStep ? 'primary' : ''}" style="pointer-events:none">${label(x)}</span></button>`).join('');
   const live = c.found.filter((f) => f.status === 'connected'), idle = c.found.length - live.length;
   const found = c.found.length ? `<p class="hint" style="margin-top:14px"><b>Also signed in on your Claude account:</b> ${live.length ? live.map((f) => esc(f.name.replace(/^claude\.ai /, ''))).join(', ') : 'none'}${idle ? `, plus ${idle} more that need a sign-in` : ''}. These are not in the catalogue, so agents must ask you before using them; any attempt appears under "Used but not in your list".</p>` : '';
   const problems = c.problems.length ? `<div class="err" role="alert"><p>${c.problems.length} tool file${c.problems.length > 1 ? 's were' : ' was'} not loaded: ${c.problems.map((p) => esc(p.file + ': ' + p.errors[0])).join(' · ')}</p></div>` : '';
@@ -327,7 +327,7 @@ function connectorPanel() {
   $('panel').innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div><h3 id="ptitle" style="margin:0">${esc(x.name)}</h3><div style="margin-top:6px">${lamp(STATE_LAMP[x.status] ?? 'off', x.statusText)}</div></div><button class="btn small" data-close-panel type="button">Close</button></div>
     <p class="s">${esc(x.summary)}${x.website ? ` <a href="${esc(x.website)}" target="_blank" rel="noopener">Website</a>` : ''}</p>
     ${x.roles.length ? `<p class="s mono-s">Used by ${esc(x.roles.map(prettyRole).join(', '))}</p>` : ''}
-    ${CONN.msg ? `<div class="${CONN.msg.bad ? 'err' : 'hint'}" role="status" style="margin:8px 0"><p style="margin:0">${esc(CONN.msg.text)}</p></div>` : ''}
+    ${CONN.msg ? `<div class="${CONN.msg.bad ? 'err' : 'hint'}" role="status" style="margin:8px 0"><p style="margin:0;white-space:pre-wrap">${esc(CONN.msg.text)}</p></div>` : ''}
     <ol style="padding:0;margin:14px 0 0">${steps}</ol>
     ${x.activity.calls24h ? `<p class="s mono-s">Last 24 h: ${x.activity.calls24h} call${x.activity.calls24h === 1 ? '' : 's'}, ${x.activity.blocked24h} blocked</p>` : ''}`;
 }
@@ -338,7 +338,7 @@ async function connStep(step, op, confirmThirdParty) {
   CONN.busy = true; CONN.msg = null; connectorPanel();
   const r = op === 'check' ? await api('/api/connectors/refresh', {}) : await api('/api/connectors/step', { id: CONN.open, step, op, confirmThirdParty: confirmThirdParty === true });
   CONN.busy = false; CONN.confirm = false;
-  CONN.msg = r.status === 200 ? { text: op === 'check' ? 'Checked just now.' : 'Done.' } : { text: r.json.error ?? 'That did not work.', bad: true };
+  CONN.msg = r.status === 200 ? { text: r.json.output ? r.json.output : op === 'check' ? 'Checked just now.' : 'Done.' } : { text: r.json.error ?? 'That did not work.', bad: true };
   await load(); connectorPanel();
 }
 

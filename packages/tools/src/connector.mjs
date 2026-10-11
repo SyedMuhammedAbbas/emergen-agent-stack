@@ -12,7 +12,7 @@ const ID = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/, SERVER = /^[a-z0-9][a-z0-9_-]{1,
 const HTTPS = /^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i;
 const PINNED = /^(@[a-z0-9-]+\/)?[a-z0-9._-]+@\d+\.\d+\.\d+$/, ENVNAME = /^[A-Z][A-Z0-9_]{1,40}$/, BINARY = /^[a-z0-9][a-z0-9._-]{0,30}$/, HEALTH = /^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\/[A-Za-z0-9._\/-]*$/;
 const POLICY = new Set(['allow', 'ask', 'off']), STEP_KINDS = new Set(['info', 'action', 'manual', 'check']);
-const ACTIONS = new Set(['register-mcp', 'sync-policy']), CHECKS = new Set(['mcp-status', 'binary', 'secret-file', 'gh-auth', 'health', 'policy-synced']);
+const ACTIONS = new Set(['register-mcp', 'sync-policy', 'wire-omniroute']), CHECKS = new Set(['mcp-status', 'binary', 'secret-file', 'gh-auth', 'health', 'policy-synced', 'omniroute-wired']);
 const TYPES = new Set(['mcp-http', 'mcp-stdio', 'cli', 'local-service']);
 
 /** @returns {{ok:true, value:any} | {ok:false, errors:string[]}} */

@@ -47,7 +47,7 @@ test('cli, local service and secret-file steps are checked, not trusted', () => 
   assert.equal(view(sk, { mcp: [], secrets: { P_KEY: true } }).steps[0].state, 'done'); assert.equal(view(sk, { mcp: [], secrets: {} }).steps[0].state, 'todo');
 });
 
-test('the status script only reads: no writes, no secret contents', () => { assert.ok(!/\bcat\b|>\s*[^&\s]|rm |tee/.test(STATUS_SCRIPT.replace(/>\/dev\/null 2>&1|2>&1/g, ''))); assert.match(STATUS_SCRIPT, /-f "\$HOME\/\.agent-stack\/secrets\/\$s"/); });
+test('the status script only reads: no writes, no secret contents', () => { assert.ok(!/\bcat\b|>\s*[^&\s]|rm |tee/.test(STATUS_SCRIPT.replace(/>\/dev\/null 2>&1|2>\/dev\/null|2>&1/g, ''))); assert.match(STATUS_SCRIPT, /-f "\$HOME\/\.agent-stack\/secrets\/\$s"/); });
 
 // ---- running steps ----
 function harness(extra = {}) {
@@ -90,4 +90,25 @@ test('a failing step reports the reason without leaking, and is audited as faile
   const { api, audit } = harness({ fail: true });
   const r = await api.run({ id: 'upwork', step: 'register', op: 'run' });
   assert.equal(r.status, 502); assert.match(r.error, /already exists/); assert.equal(audit[0].ok, false);
+});
+
+// ---- OmniRoute walkthrough ----
+test('OmniRoute: the wiring step follows what is observed, and the key file is only checked for existence', () => {
+  const omni = { schemaVersion: 1, id: 'omniroute', name: 'OmniRoute', category: 'ai-models', summary: 's', connect: { type: 'local-service', health: 'http://127.0.0.1:20128/api/health' }, steps: [
+    { kind: 'check', id: 'key-file', title: 'k', check: 'secret-file', secret: 'OMNIROUTE_API_KEY' }, { kind: 'action', id: 'wire', title: 'w', do: 'wire-omniroute' }, { kind: 'check', id: 'wired', title: 'c', check: 'omniroute-wired' }] };
+  const v0 = buildView([omni], { health: { omniroute: true }, secrets: {}, omniWired: false })[0];
+  assert.deepEqual(v0.steps.map((s) => s.state), ['todo', 'todo', 'todo']); assert.equal(v0.currentStep, 'key-file'); assert.equal(v0.status, 'connected');
+  const v1 = buildView([omni], { health: { omniroute: true }, secrets: { OMNIROUTE_API_KEY: true }, omniWired: true })[0];
+  assert.deepEqual(v1.steps.map((s) => s.state), ['done', 'done', 'done']); assert.equal(v1.currentStep, null);
+  assert.match(STATUS_SCRIPT, /20128/); assert.ok(!/OMNIROUTE_API_KEY=/.test(STATUS_SCRIPT));
+});
+
+test('wiring runs the repo script in WSL; a refusal comes back as the script\'s own explanation', async () => {
+  const calls = [];
+  const mk = (out, fail) => createConnectors({ repo, settings: { distro: 'Ubuntu-24.04' }, appDir: mkdtempSync(join(tmpdir(), 'conn-')), fetch: async () => ({ ok: true }),
+    exec: async (c, a) => { calls.push(a); if (fail) { const e = new Error('exit 1'); e.stdout = out; throw e; } return { stdout: out }; } });
+  const ok = await mk('live test passed\nDONE.', false).run({ id: 'omniroute', step: 'wire', op: 'run' });
+  assert.equal(ok.status, 200); assert.match(ok.output, /DONE/); assert.match(calls[0].join(' '), /wsl\/46-omniroute-wire\.sh/); assert.equal(calls[0][calls[0].indexOf('_') + 1].includes('agent-stack'), true);
+  const refused = await mk('  MISSING  no OmniRoute API key: create the file\nNothing was changed.', true).run({ id: 'omniroute', step: 'wire', op: 'run' });
+  assert.equal(refused.status, 502); assert.match(refused.error, /MISSING\s+no OmniRoute API key/); assert.match(refused.error, /Nothing was changed/);
 });
