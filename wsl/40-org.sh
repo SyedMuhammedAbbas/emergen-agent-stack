@@ -153,6 +153,7 @@ log "stop hook installed"
 
 # PreToolUse hook: agents may not install/uninstall apps on, or create/wipe, the shared test devices
 install -m 755 "$REPO_DIR/wsl/hooks/device-guard.sh" ~/.claude/hooks/device-guard.sh
+install -m 644 "$REPO_DIR/wsl/hooks/device-guard.mjs" ~/.claude/hooks/device-guard.mjs   # the rules; needs node, not jq
 tmp=$(mktemp)
 jq '.hooks.PreToolUse = [{"matcher":"Bash","hooks":[{"type":"command","command":"$HOME/.claude/hooks/device-guard.sh","timeout":10}]}]' \
   ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json

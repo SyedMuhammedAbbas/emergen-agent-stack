@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Claude Code Stop hook for the agents: a run may not end while a build or test
 # it started is still running (the task would be left without a verdict).
+# No jq needed. This hook is deliberately fail-open (unlike device-guard): if it cannot tell, it lets the
+# run end, because blocking forever would trap the agent. The attempt counter below is the safety valve.
 in=$(cat)
-sid=$(echo "$in" | jq -r '.session_id // "x"')
+# only [A-Za-z0-9_-] is kept, so the id is safe to use in a file name
+sid=$(printf '%s' "$in" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9_-]*\)".*/\1/p' | head -1)
+sid=${sid:-x}
 
 if [ "$(uname)" = Darwin ]; then
   # macOS has no /proc: same walk with ps and pgrep. The claude process is found by the last path component
@@ -44,5 +48,6 @@ fi  # end Linux/WSL (/proc)
 [ -n "$busy" ] || { rm -f "/tmp/wfb-$sid"; exit 0; }
 n=$(( $(cat "/tmp/wfb-$sid" 2>/dev/null || echo 0) + 1 )); echo "$n" > "/tmp/wfb-$sid"
 [ "$n" -le 40 ] || exit 0   # safety valve: stop blocking after ~40 attempts
-jq -n --arg r "A command you started is still running: $(echo "$busy" | head -1). Do not end the run. Wait with a foreground command (sleep 240), then check its output; repeat until it exits, then post the verdict/summary." \
-  '{decision:"block",reason:$r}'
+# the command text is untrusted: drop control characters, escape backslash and quote for the JSON string
+cmd=$(echo "$busy" | head -1 | tr -d '\000-\037' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+printf '{"decision":"block","reason":"A command you started is still running: %s. Do not end the run. Wait with a foreground command (sleep 240), then check its output; repeat until it exits, then post the verdict/summary."}\n' "$cmd"
