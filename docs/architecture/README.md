@@ -18,6 +18,7 @@ Status: **proposal for review. Nothing here is implemented, committed, pushed or
 | 12 | [M1 plan: the reconciler](12-m1-plan.md) |
 | 13 | [M1 API findings](13-m1-api-findings.md) |
 | 14 | [M2 plan: the Control App](14-m2-plan.md) |
+| 15 | [M2 design direction](15-m2-design.md) |
 
 ## Executive summary
 
