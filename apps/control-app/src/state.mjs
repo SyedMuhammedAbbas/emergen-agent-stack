@@ -11,6 +11,8 @@ import { appDirOf } from './audit.mjs';
 import { buildTeam, runStackPlan } from './team.mjs';
 import { readModels, pathsOf } from './models.mjs';
 import { readTools } from './tools.mjs';
+import { createConnectors } from './connectors.mjs';
+import { createPermissions } from './permissions.mjs';
 import { readInventory, listBackups, lastScan } from './safety.mjs';
 import { loadCache, saveCache, mergeRuns, buildCost, buildActivity } from './costs.mjs';
 
@@ -27,7 +29,7 @@ export function loadSettings({ appDir = join(process.env.LOCALAPPDATA ?? '.', 'A
   return s;
 }
 
-export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new Date() }) {
+export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new Date(), audit }) {
   let latest = null, inflight = null; const started = now().toISOString();
   const cacheFile = join(settings.appDir ?? appDirOf(settings), 'cost-cache.json'), cache = loadCache(cacheFile); cache.agents ??= {}; let sig = '';
   const titling = new Set();
@@ -54,6 +56,14 @@ export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new D
     if (tools.running) return; tools.running = true;
     try { tools.data = await (io.readTools ?? ((st) => readTools(st, { exec: io.exec, agentNames: cache.agents })))(settings); } catch { /* keep the last reading */ }
     finally { tools.running = false; tools.at = Date.now(); }
+  }
+  // the connector catalogue with live status (runs `claude mcp list`, which takes a few seconds): about once a minute, and right after a setup step
+  const conn = { at: 0, data: null, running: false };
+  const connApi = settings.repo ? (io.connectors ?? createConnectors({ repo: settings.repo, settings, audit, appDir: settings.appDir ?? appDirOf(settings), exec: io.exec, fetch: io.fetch, getTools: () => tools.data })) : null;
+  const permApi = settings.repo ? (io.permissions ?? createPermissions({ repo: settings.repo, settings, audit, exec: io.exec })) : null;
+  async function refreshConnectors() {
+    if (!connApi || conn.running) return; conn.running = true;
+    try { conn.data = await connApi.read(); } catch { /* keep the last reading */ } finally { conn.running = false; conn.at = Date.now(); }
   }
   async function refreshPlan() {
     if (plan.running) return; plan.running = true;
@@ -84,6 +94,7 @@ export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new D
     if (paperclip.up && !plan.running && Date.now() - plan.at > (io.planEveryMs ?? 60000)) refreshPlan();
     const team = buildTeam(paperclip.raw?.agents ?? [], plan.data, { ranAt: plan.at ? new Date(plan.at).toISOString() : null, error: plan.error });
     if (!models.running && Date.now() - models.at > (io.modelsEveryMs ?? 30000)) refreshModels();
+    if (!conn.running && Date.now() - conn.at > (io.connectorsEveryMs ?? 60000)) refreshConnectors();
     if (!tools.running && Date.now() - tools.at > (io.toolsEveryMs ?? 15000)) refreshTools();
     if (!safety.running && Date.now() - safety.at > (io.safetyEveryMs ?? 60000)) refreshSafety();
     const safetyView = safety.data ? { ...safety.data, lastScan: lastScan(appDir) } : null;
@@ -94,13 +105,15 @@ export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new D
       paperclip: { up: paperclip.up, error: paperclip.error, company: paperclip.company?.name ?? null },
       crew: paperclip.crew ?? [], recent: paperclip.recent ?? [], approvalsPending: paperclip.approvalsPending ?? 0,
       runs: { today: cost.days.at(-1)?.runs ?? 0, month: cost.month.runs },
-      spend, cost, activity, team, tools: tools.data, safety: safetyView, models: models.data ? { ...models.data, paths: pathsOf(team.agents) } : null,
+      spend, cost, activity, team, tools: tools.data, connectors: conn.data, safety: safetyView, models: models.data ? { ...models.data, paths: pathsOf(team.agents) } : null,
       disk: { cFreeGB: disk },
     };
   }
   async function refresh() { return (inflight ??= build().then((v) => (latest = v)).finally(() => { inflight = null; })); }
   return {
-    refresh, refreshSafety,
+    refresh, refreshSafety, refreshConnectors,
+    permissions: permApi && { run: async (a) => { const r = await permApi.run(a); if (r.status === 200) { await refreshTools(); refreshConnectors(); } return r; } },
+    connectors: connApi && { run: async (a) => { const r = await connApi.run(a); if (r.status === 200) { await refreshTools(); await refreshConnectors(); } return r; }, refresh: refreshConnectors },
     /** Cached while fresh; otherwise waits for a new reading. */
     async get() { return latest && now() - new Date(latest.checkedAt) < ttlMs ? latest : refresh(); },
     start(everyMs = 10000) { const t = setInterval(() => refresh().catch(() => {}), everyMs); t.unref?.(); return () => clearInterval(t); },

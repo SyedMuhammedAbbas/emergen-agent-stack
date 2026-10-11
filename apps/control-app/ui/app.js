@@ -296,16 +296,72 @@ function safetyScreen() {
     '<p class="tiles-note">Paths and permissions only; file contents are never read here. Windows file permissions are not checked.</p>';
 }
 
+// ---- Connectors: the catalogue of tools you can connect, with a guided setup ----
+const CONN = { open: null, busy: false, msg: null, confirm: false };
+const ROLE_NAME = { cto: 'CTO', qa: 'QA', ux: 'UX', devops: 'DevOps', secops: 'SecOps', docs: 'Docs' };
+const prettyRole = (k) => ROLE_NAME[k] ?? k.replace(/-/g, ' ').replace(/(^| )(.)/g, (_, a, c) => a + c.toUpperCase());
+const STATE_LAMP = { 'not-set-up': 'off', 'needs-sign-in': 'warn', connected: 'ok', active: 'ok', failed: 'fail' };
+function catalogue() {
+  const c = S.connectors;
+  if (!c) return '<section class="card"><h2>Tools you can connect</h2><p class="hint">Reading the catalogue (this takes a few seconds)…</p></section>';
+  const label = (x) => (x.status === 'not-set-up' ? 'Set up' : x.status === 'needs-sign-in' ? 'Finish setup' : 'Open');
+  const cards = c.connectors.map((x) => `<button class="tile" type="button" data-conn="${esc(x.id)}" style="text-align:left;align-items:flex-start"><span style="display:flex;justify-content:space-between;gap:8px;width:100%;align-items:center"><b>${esc(x.name)}</b>${lamp(STATE_LAMP[x.status] ?? 'off', x.statusText)}</span><span class="s">${esc(x.summary)}</span><span class="s mono-s">${x.roles.length ? 'Used by ' + esc(x.roles.map(prettyRole).join(', ')) : 'Available to any agent'}</span><span class="btn small ${x.status === 'not-set-up' || x.status === 'needs-sign-in' ? 'primary' : ''}" style="pointer-events:none">${label(x)}</span></button>`).join('');
+  const live = c.found.filter((f) => f.status === 'connected'), idle = c.found.length - live.length;
+  const found = c.found.length ? `<p class="hint" style="margin-top:14px"><b>Also signed in on your Claude account:</b> ${live.length ? live.map((f) => esc(f.name.replace(/^claude\.ai /, ''))).join(', ') : 'none'}${idle ? `, plus ${idle} more that need a sign-in` : ''}. These are not in the catalogue, so agents must ask you before using them; any attempt appears under "Used but not in your list".</p>` : '';
+  const problems = c.problems.length ? `<div class="err" role="alert"><p>${c.problems.length} tool file${c.problems.length > 1 ? 's were' : ' was'} not loaded: ${c.problems.map((p) => esc(p.file + ': ' + p.errors[0])).join(' · ')}</p></div>` : '';
+  return `<section class="card"><h2>Tools you can connect</h2><p class="hint">Each tool is one file in the catalogue. Set one up here, step by step; nothing is sent to a tool until you sign in to it yourself.</p>${problems}<div class="grid">${cards}</div>${found}${c.reachable ? '' : '<p class="hint">The Ubuntu side could not be read, so statuses may be out of date.</p>'}</section>`;
+}
+function connectorPanel() {
+  const x = S?.connectors?.connectors.find((y) => y.id === CONN.open); if (!x) return;
+  const mark = (st) => (st === 'done' ? '<span class="lamp ok"><i></i><span class="sr">Done</span></span>' : st === 'info' ? '' : '<span class="lamp off"><i></i><span class="sr">To do</span></span>');
+  const dis = CONN.busy ? 'disabled' : '';
+  const steps = x.steps.map((st, i) => {
+    const cur = st.id === x.currentStep && st.state === 'todo', b = (op, label, cls = 'primary', extra = '') => `<button class="btn ${cls} small" type="button" data-cstep="${esc(st.id)}" data-cop="${op}" ${extra} ${dis}>${label}</button>`;
+    let act = '';
+    if (cur && st.kind === 'action') act = st.confirmThirdParty ? (CONN.confirm ? `<p class="hint">This downloads and runs ${esc(x.thirdPartyCode)} from npm on your computer.</p>${b('run', 'I understand, add it', 'primary', 'data-cconfirm="1"')}` : b('ask', 'Add it…')) : b('run', st.do === 'sync-policy' ? 'Apply' : 'Do this now');
+    else if (cur && st.kind === 'manual') act = `${st.link ? `<a class="btn small" href="${esc(st.link)}" target="_blank" rel="noopener">Open the page</a> ` : ''}${b('confirm', "I've done this")}`;
+    else if (cur && st.kind === 'check') act = b('check', 'Check again', '');
+    else if (st.kind === 'manual' && st.state === 'done' && st.id !== 'sign-in') act = b('undo-confirm', 'Undo', '');
+    return `<li style="margin:0 0 14px;list-style:none;opacity:${st.state === 'todo' && !cur ? 0.6 : 1}"><div style="display:flex;gap:10px;align-items:start"><span style="width:18px;padding-top:3px">${mark(st.state)}</span><div style="flex:1"><b>${i + 1}. ${esc(st.title)}</b>${st.text ? `<p class="s" style="margin:4px 0 8px">${esc(st.text)}</p>` : ''}${act}</div></div></li>`;
+  }).join('');
+  $('panel').innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div><h3 id="ptitle" style="margin:0">${esc(x.name)}</h3><div style="margin-top:6px">${lamp(STATE_LAMP[x.status] ?? 'off', x.statusText)}</div></div><button class="btn small" data-close-panel type="button">Close</button></div>
+    <p class="s">${esc(x.summary)}${x.website ? ` <a href="${esc(x.website)}" target="_blank" rel="noopener">Website</a>` : ''}</p>
+    ${x.roles.length ? `<p class="s mono-s">Used by ${esc(x.roles.map(prettyRole).join(', '))}</p>` : ''}
+    ${CONN.msg ? `<div class="${CONN.msg.bad ? 'err' : 'hint'}" role="status" style="margin:8px 0"><p style="margin:0">${esc(CONN.msg.text)}</p></div>` : ''}
+    <ol style="padding:0;margin:14px 0 0">${steps}</ol>
+    ${x.activity.calls24h ? `<p class="s mono-s">Last 24 h: ${x.activity.calls24h} call${x.activity.calls24h === 1 ? '' : 's'}, ${x.activity.blocked24h} blocked</p>` : ''}`;
+}
+function openConnector(id) { CONN.open = id; CONN.msg = null; CONN.confirm = false; lastFocus = document.activeElement; connectorPanel(); setPanel(true); $('panel').querySelector('[data-close-panel]').focus(); }
+async function setPermission(body, okText) { const r = await api('/api/tools/permission', body); toast(r.status === 200 ? okText : (r.json.error ?? 'That could not be saved.'), r.status !== 200); await load(); }
+async function connStep(step, op, confirmThirdParty) {
+  if (op === 'ask') { CONN.confirm = true; return connectorPanel(); }
+  CONN.busy = true; CONN.msg = null; connectorPanel();
+  const r = op === 'check' ? await api('/api/connectors/refresh', {}) : await api('/api/connectors/step', { id: CONN.open, step, op, confirmThirdParty: confirmThirdParty === true });
+  CONN.busy = false; CONN.confirm = false;
+  CONN.msg = r.status === 200 ? { text: op === 'check' ? 'Checked just now.' : 'Done.' } : { text: r.json.error ?? 'That did not work.', bad: true };
+  await load(); connectorPanel();
+}
+
+// ---- Permissions: what agents may do with each tool without asking ----
+const PERM_OPTS = [['allow', 'Allowed'], ['ask', 'Asks first'], ['off', 'Off']];
+function permRows(i) {
+  const map = Object.fromEntries(i.policy.map((p) => [p.tool, p.action])), names = [...new Set([...i.policy.map((p) => p.tool), ...i.toolsUsed])].sort();
+  const sel = (tool, cur, label) => `<select class="field" data-perm="${esc(i.server)}|${esc(tool)}" aria-label="${esc(label)}" style="margin:0;min-width:130px">${PERM_OPTS.map(([v, w]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${w}</option>`).join('')}</select>`;
+  const rows = names.map((n) => { const cur = map[n] ?? i.defaultPolicy; return `<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto;padding:8px 0"><span class="t mono-s">${esc(n)}</span>${sel(n, cur, 'What agents may do with ' + n)}${cur === 'ask' ? `<button class="btn small" type="button" data-perm-for="${esc(i.server)}|${esc(n)}">Allow for 1 hour</button>` : '<span></span>'}</div>`; }).join('');
+  return `<div class="rows" style="border:0">${rows}<div class="row" style="grid-template-columns:minmax(0,1fr) auto;padding:8px 0"><span class="t">Everything else</span>${sel('*', i.defaultPolicy, 'What agents may do with any other tool from ' + i.server)}</div></div>
+    <p class="hint">Tool names appear here the first time an agent tries one. "Asks first" holds the call until you allow it.</p>`;
+}
+
 // ---- Tools: connected tools, what each is allowed to do, and what they have done ----
 const POLICY_WORD = { allow: 'allowed', ask: 'asks first', off: 'off' };
 function toolsScreen() {
   const t = S.tools;
-  if (!t) return '<h1>Tools</h1><p class="sub">Reading the tool log…</p>';
+  if (!t) return '<h1>Tools</h1><p class="sub">Reading the tool log…</p>' + catalogue();
   const tile = (n, label) => `<div class="tile"><b class="big">${n}</b><span class="s">${label}</span></div>`;
   const chipFor = (a) => `<span class="chip ${a === 'allow' ? 'ok' : ''}">${esc(POLICY_WORD[a] ?? a)}</span>`;
   const cards = t.integrations.map((i) => `<section class="card" aria-label="${esc(i.server)}"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">${esc(i.server)}</h2>${lamp(i.calls24h ? 'ok' : 'off', i.calls24h ? 'Active today' : 'No activity yet')}</div>
       <p class="s">Everything not listed below ${i.defaultPolicy === 'ask' ? 'asks you first' : i.defaultPolicy === 'allow' ? 'is allowed' : 'is off'}.</p>
-      ${i.policy.length ? `<p>${i.policy.map((p) => `<span class="mono-s">${esc(p.tool)}</span> ${chipFor(p.action)}`).join(' &nbsp; ')}</p>` : ''}
+      ${permRows(i)}
       <p class="s mono-s">Last 24 h: ${i.calls24h} call${i.calls24h === 1 ? '' : 's'}, ${i.blocked24h} blocked, ${i.errors24h} failed${i.lastAt ? ` · last used ${esc(i.lastTool)} ${ago(i.lastAt)}` : ''}</p></section>`).join('');
   const unlisted = t.unlisted.length ? `<section class="card"><h2>Used but not in your list</h2><p class="hint">These asked to run and were treated as "asks first".</p><div class="rows">${t.unlisted.map((u) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span class="t">${esc(u.server)}</span><span class="s mono-s">${u.calls24h} call${u.calls24h === 1 ? '' : 's'} · ${u.blocked24h} blocked</span></div>`).join('')}</div></section>` : '';
   const grants = t.grants.length ? `<section class="card"><h2>Temporary approvals</h2><div class="rows">${t.grants.map((g) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span class="t mono-s">${esc(g.tool.replace(/^mcp__/, '').replace('__', ' › '))}</span><span class="s">until ${new Date(g.until).toLocaleString()}</span></div>`).join('')}</div></section>` : '';
@@ -314,8 +370,9 @@ function toolsScreen() {
       <span>${f.kind === 'result' ? lamp(f.ok === false ? 'fail' : 'ok', f.ok === false ? 'Failed' : 'Done') : lamp(f.decision === 'blocked' || f.decision === 'off' ? 'fail' : 'ok', { allowed: 'Allowed', granted: 'Approved', blocked: 'Blocked', off: 'Off' }[f.decision] ?? 'Called')}</span><span class="s mono-s" style="text-align:right;white-space:nowrap">${ago(f.at)}</span></div>`).join('')}</div>`
     : `<p class="hint" style="padding:12px 18px">${t.logging.hasLog ? 'Nothing in the last 24 hours.' : 'No tool calls recorded yet. They appear here the moment an agent uses a connected tool.'}</p>`;
   return `<h1>Tools</h1><p class="sub">Every tool your agents can use, what each is allowed to do, and what it has done. Only names and outcomes are recorded here, never the contents of a request or its answer.</p>
-    <div class="tiles">${tile(t.integrations.length, 'connected')}${tile(t.last24h.calls, 'calls in 24 h')}${tile(t.last24h.blocked, 'blocked')}${tile(t.last24h.errors, 'failed')}</div>
-    ${t.hasPolicy ? cards : '<section class="card"><h2>No tools connected yet</h2><p class="hint">Connected tools are listed from your integrations policy. Run <span class="mono-s">stack integrations sync</span> after adding one.</p></section>'}
+    ${catalogue()}
+    <div class="tiles">${tile(t.integrations.length, 'with permissions set')}${tile(t.last24h.calls, 'calls in 24 h')}${tile(t.last24h.blocked, 'blocked')}${tile(t.last24h.errors, 'failed')}</div>
+    ${t.hasPolicy ? cards : ''}
     ${unlisted}${grants}
     <section class="card flush" style="padding:0"><h2 style="padding:16px 18px 0;margin:0">What happened</h2>${feed}</section>`;
 }
@@ -423,6 +480,7 @@ function paint() {
   else if (!S) main.innerHTML = '<p style="color:var(--ink-3)">Loading…</p>';
   else if (!(r === 'setup' && document.activeElement?.id === 'sdesc')) main.innerHTML = ROUTES[r][1](); // never repaint under someone who is typing
   document.title = `${S && !failure ? `${S.headline.needCount ? `(${S.headline.needCount}) ` : ''}` : ''}${ROUTES[r][0]} · Agent Stack`;
+  if (CONN.open && $('panel').classList.contains('open') && S?.connectors) connectorPanel();
   if (S && location.hash === '#/home-needs') $('needs')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
@@ -438,6 +496,7 @@ async function load() {
 
 function applyTheme() { document.documentElement.dataset.theme = THEME || ''; const dark = THEME === 'dark' || (!THEME && matchMedia('(prefers-color-scheme:dark)').matches); $('theme').textContent = dark ? 'Light mode' : 'Dark mode'; }
 $('theme').onclick = () => { const dark = document.documentElement.dataset.theme === 'dark' || (!THEME && matchMedia('(prefers-color-scheme:dark)').matches); THEME = dark ? 'light' : 'dark'; try { localStorage.setItem('theme', THEME); } catch { /* ignore */ } applyTheme(); };
+document.addEventListener('change', (e) => { const p = e.target.dataset?.perm; if (!p) return; const [server, tool] = p.split('|'), action = e.target.value; if (action === 'allow' && tool === '*' && !confirm('Allow every tool from ' + server + ' without asking? Agents could then use ones that send messages or spend credits.')) { paint(); return; } setPermission({ server, tool, action }, tool === '*' ? 'Saved.' : `${tool} saved.`); });
 document.addEventListener('input', (e) => { if (e.target.id === 'sdesc') SETUP.text = e.target.value; });
 document.addEventListener('change', (e) => { const sf = e.target.dataset?.sf; if (sf && SETUP.req) setupEdit(sf, e.target.type === 'checkbox' ? e.target.checked : e.target.value); });
 document.addEventListener('change', (e) => { const f = e.target.dataset?.filter; if (f) { FILTER[f] = e.target.value; paint(); } });
@@ -448,6 +507,9 @@ $('logo').innerHTML = crab('Manager', 'working');
 $('railclock').textContent = 'v0.1';
 document.addEventListener('click', (e) => {
   if (e.target.closest('[data-more]')) { const d = $('dlg'); d.innerHTML = '<h3>More</h3><p style="display:flex;flex-direction:column;gap:8px"><a class="btn" href="#/cost">Cost</a><a class="btn" href="#/activity">Activity</a><a class="btn" href="#/models">Models</a><a class="btn" href="#/safety">Safety</a><a class="btn" href="#/setup">Set up</a></p><div class="acts"><button class="btn" type="button" data-x>Close</button></div>'; d.querySelectorAll('a,[data-x]').forEach((b) => { b.onclick = () => d.close(); }); d.showModal(); return; }
+  const pf = e.target.closest('[data-perm-for]'); if (pf) { const [server, tool] = pf.dataset.permFor.split('|'); return setPermission({ server, tool, action: 'allow-for', minutes: 60 }, `${tool} is allowed for 1 hour.`); }
+  const cc = e.target.closest('[data-conn]'); if (cc) return openConnector(cc.dataset.conn);
+  const cs = e.target.closest('[data-cstep]'); if (cs && !cs.disabled) return connStep(cs.dataset.cstep, cs.dataset.cop, cs.dataset.cconfirm === '1');
   const ps = e.target.closest('[data-preset]'); if (ps) return setupPreset(ps.dataset.preset);
   const su = e.target.closest('[data-setup]'); if (su && !su.disabled) { const a = su.dataset.setup; if (a === 'read') return setupInterpret(); if (a === 'apply') return setupApply(); if (a === 'back') { SETUP.step = 'describe'; return paint(); } if (a === 'again') { Object.assign(SETUP, { step: 'describe', req: null, bp: null, job: null, errors: [], note: '' }); return paint(); } }
   const ag = e.target.closest('[data-agent]'); if (ag) return openAgent(ag.dataset.agent);

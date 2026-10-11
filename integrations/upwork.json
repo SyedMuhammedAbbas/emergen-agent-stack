@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "id": "upwork",
-  "kind": "mcp",
-  "server": { "name": "upwork", "url": "https://mcp.upwork.com/mcp", "transport": "streamable-http" },
-  "auth": "oauth: you sign in yourself (in Ubuntu run claude, type /mcp, choose upwork); tokens never go in this repo",
-  "toolPolicy": { "*": "ask" },
-  "note": "Everything asks first. After you have seen the tool names the server offers (claude mcp list / the /mcp screen), set the read-only ones to allow here, for example searchJobs. Writes (proposals, messages) stay on ask."
-}

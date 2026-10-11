@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "omniroute",
+  "name": "OmniRoute",
+  "category": "ai-models",
+  "summary": "A local gateway that lets agents use models other than Claude. Providers and keys are added in its own dashboard.",
+  "roles": [],
+  "connect": { "type": "local-service", "health": "http://127.0.0.1:20128/api/health" }
+}

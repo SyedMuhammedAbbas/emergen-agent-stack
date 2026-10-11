@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "github",
+  "name": "GitHub",
+  "category": "code",
+  "summary": "Agents use the GitHub command line to read code, open pull requests and comment on issues, as your signed-in account.",
+  "website": "https://cli.github.com",
+  "roles": ["manager", "cto", "frontend", "backend", "devops", "secops", "qa", "docs"],
+  "connect": { "type": "cli", "binary": "gh", "authCheck": "gh-auth" }
+}

@@ -39,3 +39,7 @@ test('a policy file without a trailing newline still splits from the next sectio
   assert.equal(t.integrations.length, 1); assert.equal(t.feed.length, 1);
   assert.match(CMD, /echo; echo '---'/); // the command itself guarantees the newline
 });
+
+test('the read command succeeds even when there is no log, policy or grants yet (a fresh install)', () => {
+  assert.ok(CMD.trim().endsWith('; true'));
+});

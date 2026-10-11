@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "upwork",
+  "name": "Upwork",
+  "category": "freelance",
+  "summary": "Search freelance jobs and read your profile so agents can draft proposals. Agents draft; you submit.",
+  "website": "https://www.upwork.com",
+  "roles": ["lead-scout"],
+  "connect": { "type": "mcp-http", "server": "upwork", "url": "https://mcp.upwork.com/mcp" },
+  "policy": { "*": "ask" }
+}

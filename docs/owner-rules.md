@@ -58,3 +58,11 @@ Every standing instruction from the owner, and the file that teaches it to the a
 | No agent stays stalled: watchdog every 10 min plus a Watchdog agent sweep every 2 hours | `wsl/watchdog/watchdog.sh`, `org/operations/watchdog.md` |
 | Parallel runs capped per agent (2 engineers/QA/UX, 1 for the rest) | `org/<dept>/department.json` |
 | Disk guard pauses agents when the system drive is low and resumes them | `hermes/agent_ops.py` (`diskguard`) |
+
+## How the system is built (the product direction)
+
+| Rule | Where |
+|---|---|
+| Agents are role-based and general (Content Writer, Lead Scout), never named after the company or a tool; company facts live in the company's brand profile skill, and the tool an agent uses is a setting, not its identity | `org/<dept>/department.json`, `project-skills/<company>-context` |
+| Every tool the company uses is connected through the system and shown in one place with what it is doing; a new tool is added by adding one file to the catalogue, and tools that need setup are walked through in the app | `connectors/*.json`, `apps/control-app` (Tools screen), `docs/architecture/20-tool-hub.md` |
+| The owner decides what agents may do with each tool (allowed, asks first, off); every tool call is recorded by name and outcome, never by content | `wsl/hooks/mcp-policy.mjs`, Tools screen |

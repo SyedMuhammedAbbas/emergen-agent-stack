@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "playwright",
+  "name": "Playwright browser",
+  "category": "browser",
+  "summary": "Lets agents open and drive a real browser to test and inspect web pages. Made by Microsoft.",
+  "website": "https://github.com/microsoft/playwright-mcp",
+  "roles": ["qa", "frontend", "ux"],
+  "connect": { "type": "mcp-stdio", "server": "playwright", "package": "@playwright/mcp@0.0.83" },
+  "policy": { "*": "ask" }
+}

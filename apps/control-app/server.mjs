@@ -38,6 +38,9 @@ export function createServer({ store, token = crypto.randomBytes(16).toString('h
           const b = await readJson(req);
           if (url.pathname === '/api/action' && actions) { const r = await actions.run({ service: String(b.service ?? ''), action: String(b.action ?? ''), force: b.force === true }); const { status, ...rest } = r; return send(res, status, rest); }
           if (url.pathname === '/api/safety' && safety) { const r = await safety.run({ action: String(b.action ?? '') }); const { status, ...rest } = r; return send(res, status, rest); }
+          if (url.pathname === '/api/connectors/step' && store.connectors) { const r = await store.connectors.run({ id: String(b.id ?? ''), step: String(b.step ?? ''), op: String(b.op ?? ''), confirmThirdParty: b.confirmThirdParty === true }); const { status, ...rest } = r; return send(res, status, rest); }
+          if (url.pathname === '/api/tools/permission' && store.permissions) { const r = await store.permissions.run({ server: String(b.server ?? ''), tool: String(b.tool ?? ''), action: String(b.action ?? ''), minutes: b.minutes }); const { status, ...rest } = r; return send(res, status, rest); }
+          if (url.pathname === '/api/connectors/refresh' && store.connectors) { await store.connectors.refresh(); return send(res, 200, { ok: true }); }
           const sm = url.pathname.match(/^\/api\/setup\/(interpret|preview|apply)$/);
           if (sm && setup) { const r = await (sm[1] === 'interpret' ? setup.interpret({ text: b.text, useModel: b.useModel !== false }) : setup[sm[1]]({ requirements: b.requirements, hash: b.hash })); const { status, ...rest } = r; return send(res, status, rest); }
           if (url.pathname === '/api/doctor' && settings) return send(res, 200, await runDoctor({ settings, state: await store.get(), repo, io }));
@@ -57,8 +60,8 @@ export function createServer({ store, token = crypto.randomBytes(16).toString('h
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const repo = path.resolve(here, '..', '..');
-  const settings = loadSettings({ repo }), store = createStore({ settings });
-  const audit = createAudit(appDirOf(settings)), actions = createActions({ settings, store, audit });
+  const settings = loadSettings({ repo }), audit = createAudit(appDirOf(settings)), store = createStore({ settings, audit });
+  const actions = createActions({ settings, store, audit });
   const safety = createSafetyActions({ settings, audit, appDir: appDirOf(settings), refresh: () => store.refreshSafety() });
   const setup = createSetup({ repo, audit });
   const { server, token } = createServer({ store, actions, audit, settings, repo, safety, setup });

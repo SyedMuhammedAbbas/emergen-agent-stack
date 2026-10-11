@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRunner } from '../../packages/tools/src/runner.mjs';
+import { loadConnectors } from '../../packages/tools/src/connector.mjs';
 
 const MAX_GRANT_MIN = 1440;
 const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_');
@@ -44,15 +45,12 @@ async function dispatch({ argv, state, repo, log, die }) {
   }
 
   if (group === 'integrations') {
-    const dir = join(repo, 'integrations'), pf = join(state, 'integrations.json'), gf = join(state, 'grants.json');
+    const pf = join(state, 'integrations.json'), gf = join(state, 'grants.json');
     if (sub === 'sync') {
-      const integrations = {};
-      for (const f of existsSync(dir) ? readdirSync(dir).filter((x) => x.endsWith('.json')) : []) {
-        const j = readJson(join(dir, f), null); if (!j || j.schemaVersion !== 1 || j.kind !== 'mcp' || !j.server?.name) { log(`skipped ${f}: not a valid integration`); continue; }
-        const tp = j.toolPolicy && typeof j.toolPolicy === 'object' ? j.toolPolicy : { '*': 'ask' };
-        for (const [k, v] of Object.entries(tp)) if (!['allow', 'ask', 'off'].includes(v)) die(`${f}: "${k}" must be allow, ask or off`);
-        integrations[norm(j.server.name)] = { id: j.id, toolPolicy: tp };
-      }
+      const integrations = {}, { connectors, problems } = loadConnectors(repo);
+      for (const p of problems) log(`skipped connectors/${p.file}: ${p.errors[0]}`);
+      const ov = readJson(join(state, 'policy-overrides.json'), {}).overrides ?? {}; // the owner's choices made in the app or with `integrations set`, layered over each connector's defaults
+      for (const c of connectors.filter((x) => x.connect.type.startsWith('mcp-'))) { const key = norm(c.connect.server); integrations[key] = { id: c.id, toolPolicy: { ...(c.policy ?? { '*': 'ask' }), ...(Object.hasOwn(ov, key) ? ov[key] : {}) } }; }
       mkdirSync(state, { recursive: true }); writeFileSync(pf, JSON.stringify({ schemaVersion: 1, integrations }, null, 2));
       return log(`integrations policy written for ${Object.keys(integrations).join(', ') || 'no integrations'}: ${pf}`);
     }
@@ -80,6 +78,19 @@ async function dispatch({ argv, state, repo, log, die }) {
       }
       mkdirSync(state, { recursive: true }); writeFileSync(gf, JSON.stringify({ grants }, null, 2)); return;
     }
-    return die('usage: stack integrations sync | list | grant <server> <tool> [--minutes n] | revoke <server> <tool>|--all');
+    if (sub === 'set' || sub === 'unset') {
+      const [server, tool, action] = positional;
+      if (!server || !tool || (sub === 'set' && !['allow', 'ask', 'off'].includes(action))) die('usage: stack integrations set <server> <tool|*> <allow|ask|off>   |   unset <server> <tool|*>');
+      if (!/^[A-Za-z0-9_.-]{1,60}$/.test(server) || !/^(\*|[A-Za-z0-9_.-]{1,60})$/.test(tool)) die('server and tool must be plain names');
+      const of = join(state, 'policy-overrides.json'), data = readJson(of, { schemaVersion: 1, overrides: {} }), key = norm(server);
+      data.overrides = data.overrides && typeof data.overrides === 'object' ? data.overrides : {};
+      const mine = Object.hasOwn(data.overrides, key) ? data.overrides[key] : {};
+      if (sub === 'set') mine[tool] = action; else delete mine[tool];
+      if (Object.keys(mine).length) data.overrides[key] = mine; else delete data.overrides[key];
+      mkdirSync(state, { recursive: true }); writeFileSync(of, JSON.stringify(data, null, 2));
+      log(sub === 'set' ? `${key} ${tool} is now "${action}"` : `${key} ${tool} is back to its default`);
+      return dispatch({ argv: ['integrations', 'sync'], state, repo, log, die });
+    }
+    return die('usage: stack integrations sync | list | set <server> <tool|*> <allow|ask|off> | unset <server> <tool|*> | grant <server> <tool> [--minutes n] | revoke <server> <tool>|--all');
   }
 }

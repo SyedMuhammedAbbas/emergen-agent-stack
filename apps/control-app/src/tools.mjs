@@ -4,7 +4,7 @@
 import { real } from './probes.mjs';
 
 const DIR = '$HOME/.agent-stack';
-export const CMD = `cat ${DIR}/integrations.json 2>/dev/null; echo; echo '---'; cat ${DIR}/grants.json 2>/dev/null; echo; echo '---'; tail -n 1500 ${DIR}/activity/tools.jsonl 2>/dev/null`;
+export const CMD = `cat ${DIR}/integrations.json 2>/dev/null; echo; echo '---'; cat ${DIR}/grants.json 2>/dev/null; echo; echo '---'; tail -n 1500 ${DIR}/activity/tools.jsonl 2>/dev/null; true`;
 const DAY = 24 * 3600 * 1000;
 
 const json = (s) => { try { return JSON.parse(s.trim()); } catch { return null; } };
