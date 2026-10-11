@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { loadBuiltins, LOADERS } from '../../packages/decisions/src/builtin.mjs';
 import { evaluate } from '../../packages/decisions/src/eval.mjs';
-import { functionProvider, openrouterProvider, openrouterKey } from '../../packages/decisions/src/providers.mjs';
+import { functionProvider, openrouterProvider, openrouterKey, headersFor } from '../../packages/decisions/src/providers.mjs';
 
 const hashOf = (d) => createHash('sha256').update(JSON.stringify(d)).digest('hex').slice(0, 16);
 const recFile = (state, id) => join(state, 'decisions', `eval-${id}.json`);
@@ -20,7 +20,7 @@ export async function run({ argv, state, repo, log, die }) {
   if (sub === 'probe') {
     const key = openrouterKey(process.env, state); if (!key) return die('no OpenRouter key. Put it in the OPENROUTER_API_KEY environment variable or in a file named openrouter.key inside ' + join(state, 'secrets') + ' yourself; this tool never asks for it.');
     if (!flag('send-filenames')) return die('probe sends one sample file name to OpenRouter. Add --send-filenames to allow it.');
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: opt('model') ?? 'typesafe/jev-1.13', temperature: 0, messages: [{ role: 'system', content: 'Choose one option for the file name. Options: ["Finance","Documents","Images and Logos","none"]. Answer with only JSON: {"choice": <option>, "confidence": <0 to 1>}.' }, { role: 'user', content: '{"name":"invoice-march.pdf"}' }] }) });
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: headersFor(key), body: JSON.stringify({ model: opt('model') ?? 'typesafe/jev-1.13', temperature: 0, messages: [{ role: 'system', content: 'Choose one option for the file name. Options: ["Finance","Documents","Images and Logos","none"]. Answer with only JSON: {"choice": <option>, "confidence": <0 to 1>}.' }, { role: 'user', content: '{"name":"invoice-march.pdf"}' }] }) });
     log(`HTTP ${res.status}`); log((await res.text()).slice(0, 3000)); return log('\nThis is the raw answer. If it does not look like {"choice","confidence"} in choices[0].message.content, adjust parse() in packages/decisions/src/providers.mjs to match.');
   }
 

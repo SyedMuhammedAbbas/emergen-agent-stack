@@ -52,7 +52,7 @@ test('ask-human and safe-default fallbacks; private inputs are logged as a hash 
   const human = await svc({}, bad, def({ fallback: { kind: 'ask-human' } })).decide('pick-color', {}); assert.equal(human.needsHuman, true); assert.equal(human.choice, 'none');
   assert.equal((await svc({}, bad, def({ fallback: { kind: 'safe-default', default: 'blue' } })).decide('pick-color', {})).choice, 'blue');
   const { mkdtempSync, readFileSync } = await import('node:fs'), { tmpdir } = await import('node:os'), { join } = await import('node:path');
-  const dir = mkdtempSync(join(tmpdir(), 'dec-')); await svc({ logDir: dir }, functionProvider(() => 'blue'), def({ dataClass: 'private' })).decide('pick-color', { secret: 'hunter2' });
+  const dir = mkdtempSync(join(tmpdir(), 'dec-')); await svc({ logDir: dir }, functionProvider(() => 'blue'), def({ dataClass: 'private' })).decide('pick-color', { content: 'hunter2' });
   const line = readFileSync(join(dir, 'calls.jsonl'), 'utf8'); assert.ok(!line.includes('hunter2')); assert.match(line, /sha256/);
 });
 
