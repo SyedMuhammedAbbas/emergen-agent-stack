@@ -1,15 +1,15 @@
 {
   "key": "freelance",
   "name": "Freelance",
-  "description": "Screens Upwork jobs and drafts proposals. The owner reads, edits and submits every proposal.",
+  "description": "Finds freelance jobs, screens them and drafts proposals. The owner reads, edits and submits every proposal.",
   "enabled": true,
-  "head": "upwork",
+  "head": "lead-scout",
   "agents": [
     {
-      "key": "upwork",
-      "name": "Upwork Scout",
+      "key": "lead-scout",
+      "name": "Lead Scout",
       "role": "general",
-      "title": "Upwork leads and proposals",
+      "title": "Finds freelance jobs and drafts proposals",
       "icon": "eye",
       "model": "claude-sonnet-5",
       "router": false,

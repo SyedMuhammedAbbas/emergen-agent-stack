@@ -1,7 +1,7 @@
 {
   "key": "branding",
   "name": "Branding",
-  "description": "Design, motion graphics and content for the company brand (orrisian.com, LinkedIn) and for clients. Nothing is published by an agent: the owner approves and posts.",
+  "description": "Design, motion graphics and content for the company brand and for clients. Nothing is published by an agent: the owner approves and posts.",
   "enabled": true,
   "head": "brand-lead",
   "agents": [
@@ -60,10 +60,10 @@
       "maxConcurrentRuns": 1
     },
     {
-      "key": "orrisian-content",
-      "name": "Orrisian Content",
+      "key": "content-writer",
+      "name": "Content Writer",
       "role": "general",
-      "title": "orrisian.com, LinkedIn and motion graphics",
+      "title": "Website, social and video-script content",
       "icon": "star",
       "model": "claude-sonnet-5",
       "router": false,
