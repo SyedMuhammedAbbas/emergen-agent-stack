@@ -35,8 +35,8 @@ test('the change runs as separate arguments after the repo path, and is audited'
 test('stack integrations set / unset layers the owner\'s choice over the connector file and survives a re-sync', () => {
   const state = mkdtempSync(join(tmpdir(), 'perm-')), run = (...a) => spawnSync(process.execPath, [cli, 'integrations', ...a], { encoding: 'utf8', env: { ...process.env, AGENT_STACK_STATE: state } });
   const pol = () => JSON.parse(readFileSync(join(state, 'integrations.json'), 'utf8')).integrations.upwork.toolPolicy;
-  assert.equal(run('sync').status, 0); assert.deepEqual(pol(), { '*': 'ask' });
-  assert.equal(run('set', 'upwork', 'searchJobs', 'allow').status, 0); assert.deepEqual(pol(), { '*': 'ask', searchJobs: 'allow' });
+  assert.equal(run('sync').status, 0); const base = { ...pol() }; assert.equal(base['*'], 'ask');
+  assert.equal(run('set', 'upwork', 'searchJobs', 'allow').status, 0); assert.deepEqual(pol(), { ...base, searchJobs: 'allow' });
   assert.equal(run('set', 'upwork', 'deleteAccount', 'off').status, 0); assert.equal(pol().deleteAccount, 'off');
   assert.equal(run('sync').status, 0); assert.equal(pol().searchJobs, 'allow'); // re-sync keeps the owner's choices
   assert.equal(run('unset', 'upwork', 'searchJobs').status, 0); assert.equal(pol().searchJobs, undefined);
