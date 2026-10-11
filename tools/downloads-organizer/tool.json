@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "downloads-organizer",
+  "version": "1.1.0",
+  "title": "Downloads organizer (on demand)",
+  "description": "Plans moves of loose files in a folder into topic subfolders using rules.js. Nothing moves until you confirm the plan; every run can be undone.",
+  "kind": "local",
+  "planner": "plan.mjs",
+  "effects": { "reads": ["roots"], "writes": true, "deletes": false, "network": [], "external": false },
+  "risk": "medium",
+  "supportsPlan": true,
+  "undo": { "kind": "journal" }
+}

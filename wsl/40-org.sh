@@ -163,10 +163,14 @@ log "stop hook installed"
 # PreToolUse hook: agents may not install/uninstall apps on, or create/wipe, the shared test devices
 install -m 755 "$REPO_DIR/wsl/hooks/device-guard.sh" ~/.claude/hooks/device-guard.sh
 install -m 644 "$REPO_DIR/wsl/hooks/device-guard.mjs" ~/.claude/hooks/device-guard.mjs   # the rules; needs node, not jq
+# PreToolUse hook: per-tool allow/ask/off for MCP tools (policy file ~/.agent-stack/integrations.json; inert without it)
+install -m 755 "$REPO_DIR/wsl/hooks/mcp-policy.sh" ~/.claude/hooks/mcp-policy.sh
+install -m 644 "$REPO_DIR/wsl/hooks/mcp-policy.mjs" ~/.claude/hooks/mcp-policy.mjs
 tmp=$(mktemp)
-jq '.hooks.PreToolUse = [{"matcher":"Bash","hooks":[{"type":"command","command":"$HOME/.claude/hooks/device-guard.sh","timeout":10}]}]' \
+jq '.hooks.PreToolUse = [{"matcher":"Bash","hooks":[{"type":"command","command":"$HOME/.claude/hooks/device-guard.sh","timeout":10}]},{"matcher":"mcp__.*","hooks":[{"type":"command","command":"$HOME/.claude/hooks/mcp-policy.sh","timeout":10}]}]' \
   ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json
-log "device guard hook installed"
+log "device guard and integrations policy hooks installed"
+node "$REPO_DIR/apps/cli/stack.mjs" integrations sync || warn "could not write the integrations policy"
 
 # ponytail plugin (github.com/DietrichGebert/ponytail, MIT): smallest-complete-change mode in every Claude Code
 # session (agents included), plus ponytail-review (a diff) and ponytail-audit (a whole repo).

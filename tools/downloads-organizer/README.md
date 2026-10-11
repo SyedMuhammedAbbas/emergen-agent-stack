@@ -15,3 +15,13 @@ npm test                         rules and a real watcher run against a temp fol
 ```
 
 `_retired-extension\` holds the earlier browser-extension version, which the watcher replaces. Delete the folder when you are sure.
+
+## On demand, with a preview and undo
+
+The same rules also run as a runner tool (`tool.json`, `plan.mjs`), for cleaning a backlog:
+
+```
+node apps/cli/stack.mjs tools plan downloads-organizer --root C:\Users\<you>\Downloads    shows what would move; changes nothing
+node apps/cli/stack.mjs tools apply <plan> --confirm <code>                                 moves the files
+node apps/cli/stack.mjs tools undo <run>                                                    puts them back
+```
