@@ -1,0 +1,158 @@
+{
+  "source": "GitHub search API, queried 2026-10-11. Stars, licence and last push are refreshed by the Refresh button. Summaries restate each project's own description.",
+  "generatedAt": "2026-10-11",
+  "items": [
+    {
+      "id": "company-wizard",
+      "area": "paperclip",
+      "repo": "Yesterday-AI/paperclip-plugin-company-wizard",
+      "stars": 186,
+      "license": "MIT",
+      "pushed": "2026-04-22",
+      "summary": "Bootstraps AI agent companies from modular templates, as a Paperclip plugin.",
+      "why": "Template ideas for departments this stack does not ship yet."
+    },
+    {
+      "id": "subagents",
+      "area": "paperclip",
+      "repo": "VoltAgent/awesome-claude-code-subagents",
+      "stars": 25639,
+      "license": "MIT",
+      "pushed": "2026-10-11",
+      "summary": "100+ specialized Claude Code subagents covering many development use cases.",
+      "why": "A catalog of role definitions to borrow from when you add an agent."
+    },
+    {
+      "id": "awesome-cc",
+      "area": "claude",
+      "repo": "hesreallyhim/awesome-claude-code",
+      "stars": 55423,
+      "license": "NOASSERTION",
+      "pushed": "2026-10-11",
+      "summary": "A hand-picked collection of resources for Claude Code.",
+      "why": "The widest map of what people build on Claude Code."
+    },
+    {
+      "id": "agent-skills",
+      "area": "claude",
+      "repo": "VoltAgent/awesome-agent-skills",
+      "stars": 35506,
+      "license": "MIT",
+      "pushed": "2026-10-11",
+      "summary": "1000+ agent skills from official dev teams and the community, usable from Claude Code.",
+      "why": "Search it before writing a skill yourself."
+    },
+    {
+      "id": "buildwithclaude",
+      "area": "claude",
+      "repo": "davepoon/buildwithclaude",
+      "stars": 3616,
+      "license": "MIT",
+      "pushed": "2026-10-10",
+      "summary": "One hub for Claude skills, agents, commands, hooks, plugins and marketplace collections.",
+      "why": "A single place to browse extensions before you vet one."
+    },
+    {
+      "id": "cc-statusline",
+      "area": "mods",
+      "repo": "NYCU-Chung/cc-statusline",
+      "stars": 264,
+      "license": "MIT",
+      "pushed": "2026-05-22",
+      "summary": "A statusline dashboard for Claude Code: session info, quota bars, an agent tracker and MCP health.",
+      "why": "Pairs with the Mod Bar if you want quota bars in the status line."
+    },
+    {
+      "id": "ai-marketing",
+      "area": "branding",
+      "repo": "zubair-trabzada/ai-marketing-claude",
+      "stars": 2733,
+      "license": "MIT",
+      "pushed": "2026-03-02",
+      "summary": "A marketing suite for Claude Code: 15 skills that run parallel subagents, such as website audits.",
+      "why": "Ideas for what a Brand Lead agent can audit and produce."
+    },
+    {
+      "id": "marketing-skills",
+      "area": "branding",
+      "repo": "kostja94/marketing-skills",
+      "stars": 1028,
+      "license": "MIT",
+      "pushed": "2026-10-06",
+      "summary": "160+ open-source agent skills for SEO, social, influencer work and more.",
+      "why": "Pick single skills for the Orrisian-style content agent instead of installing everything."
+    },
+    {
+      "id": "video-toolkit",
+      "area": "branding",
+      "repo": "digitalsamba/claude-code-video-toolkit",
+      "stars": 2200,
+      "license": "MIT",
+      "pushed": "2026-10-10",
+      "summary": "An AI-native video production toolkit for Claude Code.",
+      "why": "A comparison point for the Video Generator's Remotion workflow."
+    },
+    {
+      "id": "video-shotcraft",
+      "area": "branding",
+      "repo": "Vincentwei1021/video-shotcraft",
+      "stars": 11252,
+      "license": "Apache-2.0",
+      "pushed": "2026-10-05",
+      "summary": "A video skill for Claude Code and Codex that makes product videos with Remotion, using shot recipe cards.",
+      "why": "Ready-made shot patterns for motion graphics."
+    },
+    {
+      "id": "openmontage",
+      "area": "branding",
+      "repo": "calesthio/OpenMontage",
+      "stars": 66629,
+      "license": "AGPL-3.0",
+      "pushed": "2026-10-03",
+      "summary": "An open-source agentic video production system with 12 production pipelines.",
+      "why": "Very popular, but AGPL-3.0: read the licence before using it in client work.",
+      "caution": "AGPL-3.0 licence"
+    },
+    {
+      "id": "resume-skills",
+      "area": "freelance",
+      "repo": "Paramchoudhary/ResumeSkills",
+      "stars": 2653,
+      "license": "MIT",
+      "pushed": "2026-06-19",
+      "summary": "Agent skills for resume optimization, job applications and career development.",
+      "why": "Useful for polishing your Upwork profile and proposal proof points."
+    },
+    {
+      "id": "upwork-mcp-unofficial",
+      "area": "freelance",
+      "repo": "zcrossoverz/upwork-mcp",
+      "stars": 12,
+      "license": "none",
+      "pushed": "2026-03-21",
+      "summary": "An unofficial Upwork MCP server that searches jobs, analyzes them and submits proposals.",
+      "why": "Shown so you know it exists. This stack uses Upwork's official MCP and never submits for you.",
+      "caution": "Unofficial; submits proposals automatically, which Upwork's rules forbid"
+    },
+    {
+      "id": "n8n-templates",
+      "area": "personal",
+      "repo": "enescingoz/awesome-n8n-templates",
+      "stars": 25864,
+      "license": "NOASSERTION",
+      "pushed": "2026-09-12",
+      "summary": "280+ free n8n automation templates for Gmail, Telegram, Slack, Discord, WhatsApp, Google Sheets and more.",
+      "why": "Starting points for the kind of workflows kept under Qualifi."
+    },
+    {
+      "id": "n8n-ai-kit",
+      "area": "personal",
+      "repo": "n8n-io/self-hosted-ai-starter-kit",
+      "stars": 15276,
+      "license": "Apache-2.0",
+      "pushed": "2026-07-23",
+      "summary": "An open-source template that sets up a local, self-hosted AI environment around n8n.",
+      "why": "A way to run automations and local models without a cloud account."
+    }
+  ]
+}

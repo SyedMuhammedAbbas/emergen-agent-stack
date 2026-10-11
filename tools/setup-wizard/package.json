@@ -1,0 +1,1 @@
+{ "name": "setup-wizard", "version": "1.0.0", "private": true, "type": "module", "scripts": { "test": "node wizard.test.mjs", "start": "node server.mjs" } }

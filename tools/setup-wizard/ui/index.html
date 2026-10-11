@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent stack setup</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="rail" aria-label="Setup steps">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Agent stack<small>setup</small></span></div>
+    <div class="progress" id="progress"></div>
+    <ol id="steps"></ol>
+    <p class="rail-foot" id="mode"></p>
+  </nav>
+  <main id="main" tabindex="-1" aria-live="polite"></main>
+  <aside class="company" aria-label="Your company so far">
+    <h2>Your company</h2>
+    <div id="chart"></div>
+    <dl class="meter" id="meter"></dl>
+  </aside>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

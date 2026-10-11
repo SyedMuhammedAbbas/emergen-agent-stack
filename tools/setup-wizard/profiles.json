@@ -1,0 +1,25 @@
+{
+  "_comment": "Idle cost = what the scheduled routines cost when nobody gives the agents any task. Per-run costs: Manager wake and Watchdog sweep were measured on this stack (Oct 2026: $0.24-0.31 and $0.28-0.40 per run, API-equivalent value of Claude-subscription runs). Report and timesheet are estimates until real runs exist.",
+  "perRun": { "heartbeat": 0.28, "watchdog": 0.34, "report": 0.4, "timesheet": 0.5 },
+  "profiles": {
+    "quiet": {
+      "label": "Quiet",
+      "blurb": "The Manager wakes only when you assign work. One stall check and one progress report a day.",
+      "env": { "MANAGER_HEARTBEAT_SEC": "0", "WATCHDOG_SWEEP_SCHEDULE": "0 12 * * 1-5", "REPORT_SCHEDULE": "30 17 * * 1-5" },
+      "runs": { "heartbeat": 0, "watchdog": 22, "report": 22 }
+    },
+    "balanced": {
+      "label": "Balanced",
+      "blurb": "Two stall checks and one progress report a day on weekdays. The setup this stack runs today.",
+      "env": { "MANAGER_HEARTBEAT_SEC": "0", "WATCHDOG_SWEEP_SCHEDULE": "0 11,16 * * 1-5", "REPORT_SCHEDULE": "30 17 * * 1-5" },
+      "runs": { "heartbeat": 0, "watchdog": 44, "report": 22 }
+    },
+    "watchful": {
+      "label": "Watchful",
+      "blurb": "The Manager wakes every 4 hours, stall checks every 2 hours, reports twice a day. Costs several times more while idle.",
+      "env": { "MANAGER_HEARTBEAT_SEC": "14400", "WATCHDOG_SWEEP_SCHEDULE": "0 */2 * * *", "REPORT_SCHEDULE": "0 9,17 * * 1-6" },
+      "runs": { "heartbeat": 180, "watchdog": 360, "report": 52 }
+    }
+  },
+  "timesheetRunsPerMonth": 22
+}
