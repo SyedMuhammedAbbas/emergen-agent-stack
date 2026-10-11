@@ -260,10 +260,47 @@ function models() {
   '<section class="card flush" style="margin-top:16px" aria-labelledby="h-sm"><div style="padding:18px 18px 4px"><h2 id="h-sm">Spend by model this month</h2></div>' + spend + '</section>';
 }
 
+// ---- Safety (M2.5): database backups and secrets ----
+let SBUSY = null;
+const bytes = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
+const SLAMP = { ok: ['ok', 'OK'], warn: ['warn', 'Look at this'], absent: ['off', 'Not present'], unknown: ['off', 'Unknown'] };
+async function runSafety(action) {
+  if (SBUSY) return; SBUSY = action; paint();
+  try {
+    const { status, json } = await api('/api/safety', { action });
+    if (status === 200 && json.ok) {
+      if (action === 'backup') toast(json.result.file ? 'Backup created: ' + json.result.file.split('/').pop() + (json.result.copied ? ' (copied to ' + json.result.copied + ')' : json.result.copied === false ? ' (the copy failed)' : '') : 'Backup finished.');
+      else toast(json.result.total ? 'Found ' + json.result.total + ' possible secret' + (json.result.total === 1 ? '' : 's') + '.' : 'No secrets found.', json.result.total > 0);
+    } else toast(json.error ?? 'That did not work.', true);
+  } catch { toast('The control app did not answer.', true); }
+  SBUSY = null; await load();
+}
+function safetyScreen() {
+  const sf = S.safety;
+  if (!sf) return '<h1>Safety</h1><p class="sub">Checking backups and secret locations…</p>';
+  const b = sf.backups, sc = sf.lastScan, dis = SBUSY ? 'disabled' : '';
+  const newest = b?.available && b.backups[0] ? b.backups[0] : null;
+  const backups = !b?.available ? '<p class="hint">Backups could not be read' + (b?.error ? ': ' + esc(b.error) : '') + '.</p>' :
+    '<p style="margin:0 0 6px">' + lamp(newest ? 'ok' : 'warn', newest ? 'Latest backup ' + ago(newest.at) : 'No backups yet') + '</p>' +
+    '<p class="s" style="margin:0 0 12px">' + (b.automatic ? 'Automatic: every ' + b.everyMinutes + ' min, kept ' + b.keepDays + ' days' : 'Automatic backups are off') + ' · ' + b.count + ' backup' + (b.count === 1 ? '' : 's') + ' · ' + bytes(b.totalBytes) + '</p>' +
+    '<button class="btn primary" data-safety="backup" ' + dis + ' type="button">' + (SBUSY === 'backup' ? 'Backing up…' : 'Back up now') + '</button>' +
+    (b.backups.length ? '<div class="rows" style="margin-top:14px;border:1px solid var(--line-2);border-radius:8px">' + b.backups.slice(0, 6).map((x) => '<div class="row" style="grid-template-columns:minmax(0,2fr) auto auto;padding:9px 14px"><span class="mono-s">' + esc(x.name) + '</span><span class="s mono-s">' + bytes(x.bytes) + '</span><span class="s mono-s">' + ago(x.at) + '</span></div>').join('') + '</div>' : '') +
+    '<p class="tiles-note">' + (b.copyDir ? 'Each backup is also copied to <span class="mono">' + esc(b.copyDir) + '</span>.' : '<b>These backups sit on the same disk as the data</b> (inside WSL on C:), so they will not help if that disk is lost. To keep a second copy, add <span class="mono">"backupCopyDir": "D:\\\\Backups\\\\agent-stack"</span> to <span class="mono">%LOCALAPPDATA%\\AgentStack\\settings.json</span>; it is used on every “Back up now”.') + ' This app never restores a backup; see docs/operations.md.</p>';
+  const inv = sf.inventory.map((i) => '<div class="row" style="grid-template-columns:minmax(0,2fr) minmax(0,.9fr) minmax(0,1.6fr)"><span><span class="t">' + esc(i.what) + '</span><br><span class="s mono-s" style="overflow-wrap:anywhere">' + esc(i.path) + '</span></span><span>' + lamp(...(SLAMP[i.state] ?? SLAMP.unknown)) + '</span><span class="s">' + esc(i.note) + '</span></div>').join('');
+  const finds = sc?.findings?.length ? '<div class="rows" style="margin-top:12px;border:1px solid var(--line-2);border-radius:8px">' + [...new Map(sc.findings.map((f) => [f.file + ':' + f.line, f])).values()].slice(0, 25).map((f) => '<div class="row" style="grid-template-columns:minmax(0,2fr) auto minmax(0,1fr);padding:9px 14px"><span class="mono-s" style="overflow-wrap:anywhere">' + esc(f.file) + '</span><span class="s mono-s">line ' + f.line + '</span><span class="s">' + esc(f.kind) + '</span></div>').join('') + '</div><p class="tiles-note">Only the place and the kind are shown, never the value. Remove or rotate the secret, then scan again.</p>' : '';
+  const scan = '<p class="s" style="margin:0 0 12px">Looks for key-shaped text where secrets do not belong: files tracked by git, this app’s own data, the reconciler’s state, jev-router’s log and the services’ logs.</p><button class="btn primary" data-safety="scan" ' + dis + ' type="button">' + (SBUSY === 'scan' ? 'Scanning…' : sc ? 'Scan again' : 'Scan for leaks') + '</button>' +
+    (sc ? '<p style="margin:14px 0 0">' + lamp(sc.total ? 'fail' : 'ok', sc.total ? sc.total + ' possible secret' + (sc.total === 1 ? '' : 's') + ' found' : 'No secrets found') + '</p><p class="s" style="margin:4px 0 0">' + sc.scopes.map((x) => esc(x.name) + ': ' + x.scanned + (x.error ? ' (could not scan)' : '')).join(' · ') + '. Scanned ' + ago(sc.ranAt) + '.</p>' + finds : '<p class="hint" style="margin-top:12px">Not scanned yet.</p>');
+  return '<h1>Safety</h1><p class="sub">Backups of the database, and where your secrets live. Nothing here shows a secret’s value.</p>' +
+    '<div class="grid g2"><section class="card" aria-labelledby="h-bk"><h2 id="h-bk">Database backups</h2>' + backups + '</section><section class="card" aria-labelledby="h-ls"><h2 id="h-ls">Leak scan</h2>' + scan + '</section></div>' +
+    '<section class="card flush" style="margin-top:16px" aria-labelledby="h-inv"><div style="padding:18px 18px 4px"><h2 id="h-inv">Where secrets live</h2></div><div class="rows">' + inv + '</div></section>' +
+    '<p class="tiles-note">Paths and permissions only; file contents are never read here. Windows file permissions are not checked.</p>';
+}
+
 // ---- shell ----
 const ROUTES = { home: ['Home', home, 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'], services: ['Services', services, 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6'],
   team: ['Team', team, 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0'],
-  cost: ['Cost', cost, 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.3 5 3.3-2.2 3-5 3-5-1.1-5-3'], models: ['Models', models, 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5'],
+  cost: ['Cost', cost, 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.3 5 3.3-2.2 3-5 3-5-1.1-5-3'], safety: ['Safety', safetyScreen, 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],
+  models: ['Models', models, 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5'],
   activity: ['Activity', activity, 'M3 12h4l3-8 4 16 3-8h4'] };
 const icon = (p) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${p}"/></svg>`;
 const route = () => { const h = (location.hash.replace(/^#\/?/, '') || 'home').split('/')[0]; return ROUTES[h] ? h : 'home'; };
@@ -271,7 +308,7 @@ const route = () => { const h = (location.hash.replace(/^#\/?/, '') || 'home').s
 function paint() {
   const r = route(), badge = S?.needs.length ?? 0;
   $('nav').innerHTML = Object.entries(ROUTES).map(([k, v]) => `<a href="#/${k}" ${k === r ? 'aria-current="page"' : ''}>${icon(v[2])}<span>${v[0]}</span>${k === 'home' && badge ? `<b class="badge" aria-label="${badge} need you">${badge}</b>` : ''}</a>`).join('');
-  const MORE = ['activity', 'models'], main4 = Object.entries(ROUTES).filter(([k]) => !MORE.includes(k));
+  const MORE = ['activity', 'models', 'safety'], main4 = Object.entries(ROUTES).filter(([k]) => !MORE.includes(k));
   $('tabs').style.gridTemplateColumns = 'repeat(' + (main4.length + 1) + ',1fr)';
   $('tabs').innerHTML = main4.map(([k, v]) => '<a href="#/' + k + '" ' + (k === r ? 'aria-current="page"' : '') + '>' + icon(v[2]) + v[0] + '</a>').join('') + '<button type="button" data-more ' + (MORE.includes(r) ? 'aria-current="page"' : '') + '>' + icon('M4 7h16M4 12h16M4 17h16') + 'More</button>';
   const main = $('main');
@@ -301,10 +338,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setPanel(f
 $('logo').innerHTML = crab('Manager', 'working');
 $('railclock').textContent = 'v0.1';
 document.addEventListener('click', (e) => {
-  if (e.target.closest('[data-more]')) { const d = $('dlg'); d.innerHTML = '<h3>More</h3><p style="display:flex;flex-direction:column;gap:8px"><a class="btn" href="#/activity">Activity</a><a class="btn" href="#/models">Models</a></p><div class="acts"><button class="btn" type="button" data-x>Close</button></div>'; d.querySelectorAll('a,[data-x]').forEach((b) => { b.onclick = () => d.close(); }); d.showModal(); return; }
+  if (e.target.closest('[data-more]')) { const d = $('dlg'); d.innerHTML = '<h3>More</h3><p style="display:flex;flex-direction:column;gap:8px"><a class="btn" href="#/activity">Activity</a><a class="btn" href="#/models">Models</a><a class="btn" href="#/safety">Safety</a></p><div class="acts"><button class="btn" type="button" data-x>Close</button></div>'; d.querySelectorAll('a,[data-x]').forEach((b) => { b.onclick = () => d.close(); }); d.showModal(); return; }
   const ag = e.target.closest('[data-agent]'); if (ag) return openAgent(ag.dataset.agent);
   if (e.target.closest('[data-close-panel]')) return setPanel(false);
   const cp = e.target.closest('[data-copy]'); if (cp) { navigator.clipboard?.writeText($('cmd').textContent).then(() => toast('Command copied.'), () => toast('Select the command and copy it.', true)); return; }
+  const sb = e.target.closest('[data-safety]'); if (sb && !sb.disabled) return runSafety(sb.dataset.safety);
   const t = e.target.closest('[data-act],[data-logs],[data-doctor]'); if (!t || t.disabled) return;
   if (t.dataset.act) { const [action, service] = t.dataset.act.split(':'); return askAction(service, action); }
   if (t.dataset.logs) return toggleLogs(t.dataset.logs);

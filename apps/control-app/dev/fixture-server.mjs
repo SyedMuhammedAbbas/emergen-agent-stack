@@ -50,6 +50,21 @@ function modelsFor(name, team) {
     omniroute: { up: name !== 'svc' && !down }, paths: pathsOf(team.agents) };
 }
 
+function safetyFor(name) {
+  const now = Date.now(), leak = name === 'svc', stale = name === 'paperclip';
+  const inv = [
+    { id: 'a', where: 'WSL', path: '~/.config/jev-router/env', what: 'OpenRouter key for jev-router', state: 'ok', note: 'Private to you (mode 600).' },
+    { id: 'b', where: 'WSL', path: '~/.paperclip/instances/default/.env', what: 'Paperclip signing secrets', state: leak ? 'warn' : 'ok', note: leak ? 'Readable by other users (mode 644). Run: chmod 600 ~/.paperclip/instances/default/.env' : 'Private to you (mode 600).' },
+    { id: 'c', where: 'Windows', path: 'C:\\Users\\Administrator\\Downloads\\_Credentials\\a-very-long-folder-name-for-wrapping-tests', what: 'A folder named like it holds credentials', state: 'warn', note: 'Its contents were not read. Keep real passwords in a password manager, and rotate anything saved in plain text here.' },
+    { id: 'd', where: 'Windows', path: 'C:\\Abbas\\Emergen\\agent-stack\\config.env', what: 'Your personal settings', state: 'ok', note: 'Excluded from git.' },
+    { id: 'e', where: 'WSL', path: '~/.config/gh/hosts.yml', what: 'GitHub login', state: 'absent', note: 'Not present.' }];
+  const bk = (h, n) => ({ name: 'paperclip-20261011-' + String(n).padStart(6, '0') + '.sql.gz', bytes: 481534 + n, at: new Date(now - h * 3600000).toISOString() });
+  const list = stale ? [bk(30, 1), bk(31, 2)] : [bk(0.7, 1), bk(1.7, 2), bk(2.7, 3), bk(3.7, 4), bk(4.7, 5), bk(5.7, 6), bk(6.7, 7)];
+  const findings = leak ? [{ scope: 'Repository (tracked files)', file: 'docs/notes/a-fairly-long-path/that-keeps-going/deploy-notes-with-a-long-name.md', line: 41, kind: 'API key' }, { scope: 'Repository (tracked files)', file: 'tools/x/config.local.json', line: 7, kind: 'Secret assignment' }, { scope: 'Service logs (WSL journal)', file: 'service logs', line: 1203, kind: 'Bearer token' }] : [];
+  return { inventory: inv, backups: { available: true, dir: '/home/u/.paperclip/x', automatic: true, everyMinutes: 60, keepDays: 30, backups: list, count: list.length, totalBytes: list.reduce((n, x) => n + x.bytes, 0), copyDir: name === 'wsl' ? 'D:\\Backups\\agent-stack' : null },
+    lastScan: { ranAt: new Date(now - 300000).toISOString(), total: findings.length, findings, scopes: [{ name: 'Repository (tracked files)', scanned: 430 }, { name: 'App data on Windows', scanned: 2 }, { name: 'Reconciler state and router log (WSL)', scanned: 807 }, { name: 'Service logs (WSL journal)', scanned: 1, error: name === 'wsl' ? 'wsl down' : undefined }] } };
+}
+
 function scenario(name) {
   const w = name === 'wsl', s = name === 'svc', p = name === 'paperclip';
   const wslState = w ? 'fail' : 'ok', inWsl = (st) => (w ? 'unknown' : st);
@@ -65,13 +80,13 @@ function scenario(name) {
   const c = crew(name), pcl = { up: !w && !p, error: p ? 'ECONNREFUSED' : undefined, approvalsPending: s ? 2 : 0, crew: c };
   const total = ledger(100).cost.totalUsd, L = ledger(s ? Math.round(total / 0.86) : 100), cost = L.cost;
   const spend = { monthUsd: cost.totalUsd, apiUsd: cost.apiUsd, subscriptionUsd: cost.subscriptionUsd, budgetUsd: cost.budget.usd, alertAt: 0.8, pct: cost.budget.pct, level: cost.budget.level, projectedUsd: cost.projectedUsd };
-  const team = teamFor(c, name);
-  const needs = deriveNeeds({ services, paperclip: pcl, diskFreeGB: s ? 11 : 86, spend, team });
+  const team = teamFor(c, name), safety = safetyFor(name);
+  const needs = deriveNeeds({ services, paperclip: pcl, diskFreeGB: s ? 11 : 86, spend, team, safety });
   const up = pcl.up;
   return { checkedAt: new Date().toISOString(), startedAt: new Date().toISOString(), headline: headline(services, needs), needs, services, paperclip: { up, company: 'Emergen Engineering', error: pcl.error },
     crew: up ? c : c, recent: up ? [{ id: 'r1', agent: 'Frontend Engineer', status: 'running', at: new Date(Date.now() - 60e3).toISOString(), costUsd: null }, { id: 'r2', agent: 'QA', status: 'succeeded', at: new Date(Date.now() - 300e3).toISOString(), costUsd: 0.012, subscription: true }, { id: 'r3', agent: 'Docs', status: 'failed', at: new Date(Date.now() - 3600e3).toISOString(), costUsd: 0.041, subscription: true }] : [],
     approvalsPending: pcl.approvalsPending, runs: up ? { today: 3, month: 41 } : null,
-    models: modelsFor(name, team), team, spend, cost, activity: buildActivity(L.cache, L.byId, [{ id: 'p1', status: 'pending', createdAt: new Date().toISOString(), title: 'Approve merging EME-42 to staging and deploying to the client demo environment', requestedByAgentId: 'a6' }], 40), disk: { cFreeGB: s ? 11 : 86 } };
+    safety, models: modelsFor(name, team), team, spend, cost, activity: buildActivity(L.cache, L.byId, [{ id: 'p1', status: 'pending', createdAt: new Date().toISOString(), title: 'Approve merging EME-42 to staging and deploying to the client demo environment', requestedByAgentId: 'a6' }], 40), disk: { cFreeGB: s ? 11 : 86 } };
 }
 
 let current = 'ok';

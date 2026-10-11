@@ -3,7 +3,7 @@
 
 /** @returns {{ level:'ok'|'warn'|'fail', text:string }[]} each item: what, and why it matters / what is safe */
 const can = (s, a) => (s.actions ?? []).includes(a);   // the same list the server enforces
-export function deriveNeeds({ services, paperclip, diskFreeGB, spend, team }) {
+export function deriveNeeds({ services, paperclip, diskFreeGB, spend, team, safety, now = new Date() }) {
   const needs = [];
   const by = Object.fromEntries(services.map((s) => [s.id, s]));
   if (by.wsl?.state === 'fail') {
@@ -24,6 +24,15 @@ export function deriveNeeds({ services, paperclip, diskFreeGB, spend, team }) {
   }
   const dec = (team?.agents ?? []).filter((a) => a.state === 'decision');
   if (dec.length) needs.push({ id: 'plan-decisions', level: 'warn', title: `${dec.length} agent${dec.length > 1 ? 's need' : ' needs'} a decision (${dec.slice(0, 3).map((a) => a.name).join(', ')}${dec.length > 3 ? ', …' : ''})`, why: 'The template and Paperclip both changed the same setting. Nothing is applied until you choose.', hint: 'Open Team to see the difference.' });
+  const b = safety?.backups;
+  if (b?.available) {
+    const newest = b.backups[0] ? new Date(b.backups[0].at) : null, hours = newest ? (now - newest) / 3600000 : null;
+    if (!b.count) needs.push({ id: 'backups', level: 'warn', title: 'There are no database backups yet', why: 'If the database were damaged, nothing could be restored.', hint: 'Open Safety and choose Back up now.' });
+    else if (hours > (b.automatic ? 6 : 26)) needs.push({ id: 'backups', level: 'warn', title: `The newest database backup is ${Math.floor(hours)} hours old`, why: b.automatic ? 'Automatic backups should run every hour, so something may be wrong.' : 'Automatic backups are off.', hint: 'Open Safety and choose Back up now.' });
+  }
+  const open = (safety?.inventory ?? []).filter((x) => x.state === 'warn');
+  if (open.length) needs.push({ id: 'secret-places', level: 'warn', title: `${open.length} secret location${open.length > 1 ? 's need' : ' needs'} a look`, why: open.slice(0, 2).map((x) => x.path.split(/[\\/]/).slice(-2).join('/')).join(', ') + (open.length > 2 ? ', …' : '') + '.', hint: 'Open Safety for what to do about each.' });
+  if (safety?.lastScan?.total > 0) needs.push({ id: 'secret-leaks', level: 'fail', title: `The last leak scan found ${safety.lastScan.total} possible secret${safety.lastScan.total > 1 ? 's' : ''}`, why: 'Secret-shaped text was found where secrets should not be.', hint: 'Open Safety to see which files and lines. Values are never shown.' });
   if (spend && spend.level !== 'ok') needs.push({ id: 'budget', level: spend.level, title: spend.level === 'fail' ? `Spend has passed your $${spend.budgetUsd} monthly budget` : `Spend is at ${spend.pct}% of your $${spend.budgetUsd} monthly budget`, why: `$${spend.monthUsd.toFixed(2)} this month${spend.projectedUsd ? `; on pace for about $${spend.projectedUsd}` : ''}.`, hint: 'Review Cost, or make the agents less active.' });
   if (diskFreeGB != null && diskFreeGB < 15) needs.push({ id: 'disk', level: diskFreeGB < 5 ? 'fail' : 'warn', title: `C: has only ${diskFreeGB} GB free`, why: "WSL's disk lives on C: and goes read-only when it fills up.", hint: 'Free some space (see docs/operations.md).' });
   return needs.sort((a, b) => (a.level === 'fail' ? 0 : 1) - (b.level === 'fail' ? 0 : 1));

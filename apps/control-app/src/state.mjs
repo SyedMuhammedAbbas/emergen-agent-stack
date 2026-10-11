@@ -10,6 +10,7 @@ import { LOG_UNITS } from './logs.mjs';
 import { appDirOf } from './audit.mjs';
 import { buildTeam, runStackPlan } from './team.mjs';
 import { readModels, pathsOf } from './models.mjs';
+import { readInventory, listBackups, lastScan } from './safety.mjs';
 import { loadCache, saveCache, mergeRuns, buildCost, buildActivity } from './costs.mjs';
 
 export const DEFAULTS = { distro: 'Ubuntu-24.04', paperclip: 'http://127.0.0.1:3100', budgetUsd: 100, alertAt: 0.8, companyName: undefined };
@@ -32,6 +33,14 @@ export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new D
   // the reconciler's read-only plan for the Team screen: refreshed in the background about once a minute, never awaited
   const plan = { at: 0, data: null, error: null, running: false };
   // how Claude agents are routed and whether OmniRoute is up: refreshed in the background about every 30 s
+  const safety = { at: 0, data: null, running: false };
+  const appDir = settings.appDir ?? appDirOf(settings);
+  // secret inventory and database backups: refreshed in the background about once a minute (the leak scan only runs when you ask)
+  async function refreshSafety() {
+    if (safety.running) return; safety.running = true;
+    try { const [inventory, backups] = await Promise.all([(io.readInventory ?? ((st) => readInventory(st, { exec: io.exec })))(settings), (io.listBackups ?? ((st) => listBackups(st, { exec: io.exec })))(settings)]); safety.data = { inventory, backups }; }
+    catch { /* keep the last reading */ } finally { safety.running = false; safety.at = Date.now(); }
+  }
   const models = { at: 0, data: null, running: false };
   async function refreshModels() {
     if (models.running) return; models.running = true;
@@ -67,20 +76,22 @@ export function createStore({ settings, io = {}, ttlMs = 8000, now = () => new D
     if (paperclip.up && !plan.running && Date.now() - plan.at > (io.planEveryMs ?? 60000)) refreshPlan();
     const team = buildTeam(paperclip.raw?.agents ?? [], plan.data, { ranAt: plan.at ? new Date(plan.at).toISOString() : null, error: plan.error });
     if (!models.running && Date.now() - models.at > (io.modelsEveryMs ?? 30000)) refreshModels();
-    const needs = deriveNeeds({ services, paperclip, diskFreeGB: disk, spend, team });
+    if (!safety.running && Date.now() - safety.at > (io.safetyEveryMs ?? 60000)) refreshSafety();
+    const safetyView = safety.data ? { ...safety.data, lastScan: lastScan(appDir) } : null;
+    const needs = deriveNeeds({ services, paperclip, diskFreeGB: disk, spend, team, safety: safetyView, now: nowD });
     return {
       checkedAt: now().toISOString(), startedAt: started,
       headline: headline(services, needs), needs, services,
       paperclip: { up: paperclip.up, error: paperclip.error, company: paperclip.company?.name ?? null },
       crew: paperclip.crew ?? [], recent: paperclip.recent ?? [], approvalsPending: paperclip.approvalsPending ?? 0,
       runs: { today: cost.days.at(-1)?.runs ?? 0, month: cost.month.runs },
-      spend, cost, activity, team, models: models.data ? { ...models.data, paths: pathsOf(team.agents) } : null,
+      spend, cost, activity, team, safety: safetyView, models: models.data ? { ...models.data, paths: pathsOf(team.agents) } : null,
       disk: { cFreeGB: disk },
     };
   }
   async function refresh() { return (inflight ??= build().then((v) => (latest = v)).finally(() => { inflight = null; })); }
   return {
-    refresh,
+    refresh, refreshSafety,
     /** Cached while fresh; otherwise waits for a new reading. */
     async get() { return latest && now() - new Date(latest.checkedAt) < ttlMs ? latest : refresh(); },
     start(everyMs = 10000) { const t = setInterval(() => refresh().catch(() => {}), everyMs); t.unref?.(); return () => clearInterval(t); },

@@ -1,6 +1,6 @@
 # Agent Stack control app
 
-Status page for the stack: are the services running, what is it costing, what needs you. **Version 0.5** (Home, Services with control, Team, Cost, Activity, Models). Everything on Home is read-only; the only things it can change are starting, stopping and restarting the services listed below. Design: [docs/architecture/15-m2-design.md](../../docs/architecture/15-m2-design.md); plan: [14-m2-plan.md](../../docs/architecture/14-m2-plan.md).
+Status page for the stack: are the services running, what is it costing, what needs you. **Version 0.6** (Home, Services with control, Team, Cost, Activity, Models, Safety). Everything on Home is read-only; the only things it can change are starting, stopping and restarting the services listed below. Design: [docs/architecture/15-m2-design.md](../../docs/architecture/15-m2-design.md); plan: [14-m2-plan.md](../../docs/architecture/14-m2-plan.md).
 
 ```
 app.cmd                      (repo root) starts it and opens your browser
@@ -19,6 +19,14 @@ It runs on **Windows** (so it can still report when WSL is down), listens on `12
 | Keepalive, Hermes tasks | `schtasks /query` (no admin) | ~30 ms |
 | Crew, runs, spend, approvals | Paperclip API (`/agents`, `/heartbeat-runs`, `/approvals`) | ~20 ms |
 | C: free space | `statfs` | instant |
+
+## Safety
+
+**Database backups.** Lists Paperclip's own automatic backups (hourly, kept 30 days, read from its config) and has **Back up now**, which runs `paperclipai db:backup`. The backups live inside WSL on the same disk as the data, so the page says that plainly; set `backupCopyDir` (a Windows path such as `D:\\Backups\\agent-stack`) in settings.json to have each manual backup also copied there. A need appears on Home if there is no backup, or the newest is older than 6 hours (26 if automatic backups are off). The app never restores a backup.
+
+**Secrets.** An inventory of where the stack keeps secrets (jev-router, Paperclip, GitHub, Claude, OmniRoute, Hermes, `config.env`): paths, permissions (a secret file readable by other users is flagged with the exact `chmod`), and whether `config.env` is excluded from git. It also lists folders *named* like they hold credentials in Downloads, Desktop and Documents. **File contents are never read.** Windows file permissions are not checked.
+
+**Leak scan** (on demand, about 2 seconds): looks for key-shaped text where secrets do not belong: git-tracked files, the app's own data, the reconciler's state and jev-router's log, and the services' logs. It reports file, line and kind, **never the value**, and uses the same rules as the redactor. Placeholders, already-redacted text and code that merely generates or reads a value are not findings. A Paperclip instance's own `.env` and `secrets/` are expected secret locations and belong to the inventory instead. Test files, fixtures and `node_modules` are skipped. Anything found becomes a need on Home.
 
 ## Models
 
@@ -48,12 +56,12 @@ Spend is summed from each run's `usageJson.costUsd` (what it would cost at API p
 
 ## Settings (optional)
 
-`%LOCALAPPDATA%\AgentStack\settings.json`, any of: `distro` (default from `config.env` `WSL_DISTRO`, else `Ubuntu-24.04`), `paperclip` (`http://127.0.0.1:3100`), `budgetUsd` (100), `alertAt` (0.8), `companyName`.
+`%LOCALAPPDATA%\AgentStack\settings.json`, any of: `distro` (default from `config.env` `WSL_DISTRO`, else `Ubuntu-24.04`), `paperclip` (`http://127.0.0.1:3100`), `budgetUsd` (100), `alertAt` (0.8), `companyName`, `backupCopyDir`.
 
 ## Tests
 
 ```
-node --test apps/control-app/test/app.test.mjs apps/control-app/test/actions.test.mjs apps/control-app/test/costs.test.mjs apps/control-app/test/team.test.mjs apps/control-app/test/models.test.mjs
+node --test apps/control-app/test/app.test.mjs apps/control-app/test/actions.test.mjs apps/control-app/test/costs.test.mjs apps/control-app/test/team.test.mjs apps/control-app/test/models.test.mjs apps/control-app/test/safety.test.mjs apps/control-app/test/secretscan.test.mjs
 node apps/control-app/dev/fixture-server.mjs      # the real UI on synthetic problem states (ok, svc, wsl, paperclip)
 ```
 
