@@ -16,6 +16,8 @@ Status: **proposal for review. Nothing here is implemented, committed, pushed or
 | 10 | [Repository structure](10-repo-structure.md) |
 | 11 | [M0 spike results](11-m0-results.md) |
 | 12 | [M1 plan: the reconciler](12-m1-plan.md) |
+| 13 | [M1 API findings](13-m1-api-findings.md) |
+| 14 | [M2 plan: the Control App](14-m2-plan.md) |
 
 ## Executive summary
 
