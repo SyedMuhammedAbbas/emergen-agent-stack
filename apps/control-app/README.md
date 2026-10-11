@@ -1,6 +1,6 @@
 # Agent Stack control app
 
-Status page for the stack: are the services running, what is it costing, what needs you. **Version 0.3** (Home, Services with control, Cost, Activity). Everything on Home is read-only; the only things it can change are starting, stopping and restarting the services listed below. Design: [docs/architecture/15-m2-design.md](../../docs/architecture/15-m2-design.md); plan: [14-m2-plan.md](../../docs/architecture/14-m2-plan.md).
+Status page for the stack: are the services running, what is it costing, what needs you. **Version 0.4** (Home, Services with control, Team, Cost, Activity). Everything on Home is read-only; the only things it can change are starting, stopping and restarting the services listed below. Design: [docs/architecture/15-m2-design.md](../../docs/architecture/15-m2-design.md); plan: [14-m2-plan.md](../../docs/architecture/14-m2-plan.md).
 
 ```
 app.cmd                      (repo root) starts it and opens your browser
@@ -19,6 +19,10 @@ It runs on **Windows** (so it can still report when WSL is down), listens on `12
 | Keepalive, Hermes tasks | `schtasks /query` (no admin) | ~30 ms |
 | Crew, runs, spend, approvals | Paperclip API (`/agents`, `/heartbeat-runs`, `/approvals`) | ~20 ms |
 | C: free space | `statfs` | instant |
+
+## Team
+
+Every agent with its model, state and where it stands against the templates in `org/`: in step, keeping your edit, will update, needs a decision, or not managed. It runs the reconciler's read-only `stack plan --json` inside WSL about once a minute (in the background, never delaying a reading). Open an agent to see exactly what differs (instruction changes as a line diff) and the one command that would apply it, with a Copy button. **Applying stays in the command line**; this screen never changes anything. A decision also shows up under Needs you on Home.
 
 ## Cost and Activity
 
@@ -45,7 +49,7 @@ Spend is summed from each run's `usageJson.costUsd` (what it would cost at API p
 ## Tests
 
 ```
-node --test apps/control-app/test/app.test.mjs apps/control-app/test/actions.test.mjs apps/control-app/test/costs.test.mjs
+node --test apps/control-app/test/app.test.mjs apps/control-app/test/actions.test.mjs apps/control-app/test/costs.test.mjs apps/control-app/test/team.test.mjs
 node apps/control-app/dev/fixture-server.mjs      # the real UI on synthetic problem states (ok, svc, wsl, paperclip)
 ```
 

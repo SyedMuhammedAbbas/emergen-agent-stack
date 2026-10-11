@@ -7,6 +7,7 @@ import http from 'node:http';
 import { createServer } from '../server.mjs';
 import { deriveNeeds, headline } from '../src/needs.mjs';
 import { loadCache, mergeRuns, buildCost, buildActivity } from '../src/costs.mjs';
+import { buildTeam } from '../src/team.mjs';
 
 const svc = (id, title, about, kind, state, extra = {}) => ({ id, title, about, kind, port: null, state, text: { ok: 'Running', fail: 'Stopped', unknown: 'Unknown (WSL is down)', off: 'Not set up', warn: 'Running but not answering' }[state], ...extra });
 const crew = (down) => ['Manager|Engineering Manager', 'CTO|CTO', 'Frontend Engineer|Frontend', 'Backend Engineer|Backend', 'DevOps Engineer|DevOps', 'SecOps Engineer|SecOps', 'QA|QA', 'UX Reviewer|UX', 'Docs|Docs', 'Estimator|Estimator', 'Chief of Staff|CoS', 'Timekeeper|TK', 'Watchdog|WD', 'Brand Lead|BL', 'Designer|D', 'Video Generator|VG', 'Orrisian Content|OC', 'Upwork Scout|US']
@@ -24,6 +25,19 @@ function ledger(budgetUsd) {
   return { cache, byId, cost: buildCost(cache, byId, now, { budgetUsd, alertAt: 0.8 }) };
 }
 
+// Team states for the audit: keeping an edit, will update, a decision (long diff), not managed
+function teamFor(c, name) {
+  const long = Array.from({ length: 40 }, (_, i) => 'A fairly long instruction line number ' + i + ' that the template and the live copy disagree about, to check wrapping').join('\n');
+  const raw = c.map((x, i) => ({ id: x.id, name: x.name, title: x.title, role: 'qa', status: 'idle', budgetMonthlyCents: 300 + i * 100, reportsTo: i ? c[0].id : null, adapterConfig: { model: i % 3 ? 'claude-sonnet-5' : undefined, env: i % 3 ? {} : { ANTHROPIC_BASE_URL: '*' } }, metadata: x.name === 'Watchdog' ? null : { stack: { key: x.name.toLowerCase().replace(/ /g, '-') } } }));
+  const key = (n) => n.toLowerCase().replace(/ /g, '-'), id = (n) => c.find((x) => x.name === n).id;
+  const plan = { agents: c.map((x) => ({ id: x.id, key: key(x.name), action: 'noop', fields: [] })) };
+  const set = (n, action, fields) => { const a = plan.agents.find((x) => x.id === id(n)); a.action = action; a.fields = fields; };
+  set('Estimator', 'record', [{ field: 'instructions', op: 'keep-live', from: long, to: long.replace(/line number 1/, 'line number ONE').replace('number 7', 'number SEVEN') }]);
+  set('QA', 'update', [{ field: 'title', op: 'update', from: 'QA', to: 'Senior QA engineer for the whole delivery pipeline' }]);
+  if (name === 'svc') set('Docs', 'needs-decision', [{ field: 'skills', op: 'conflict', from: ['a', 'b'], to: ['a', 'c'] }, { field: 'instructions', op: 'conflict', from: long, to: long.split('\n').reverse().join('\n') }]);
+  return buildTeam(raw, name === 'wsl' || name === 'paperclip' ? null : plan, { ranAt: new Date().toISOString(), error: name === 'wsl' ? 'WSL is down' : null });
+}
+
 function scenario(name) {
   const w = name === 'wsl', s = name === 'svc', p = name === 'paperclip';
   const wslState = w ? 'fail' : 'ok', inWsl = (st) => (w ? 'unknown' : st);
@@ -39,12 +53,13 @@ function scenario(name) {
   const c = crew(name), pcl = { up: !w && !p, error: p ? 'ECONNREFUSED' : undefined, approvalsPending: s ? 2 : 0, crew: c };
   const total = ledger(100).cost.totalUsd, L = ledger(s ? Math.round(total / 0.86) : 100), cost = L.cost;
   const spend = { monthUsd: cost.totalUsd, apiUsd: cost.apiUsd, subscriptionUsd: cost.subscriptionUsd, budgetUsd: cost.budget.usd, alertAt: 0.8, pct: cost.budget.pct, level: cost.budget.level, projectedUsd: cost.projectedUsd };
-  const needs = deriveNeeds({ services, paperclip: pcl, diskFreeGB: s ? 11 : 86, spend });
+  const team = teamFor(c, name);
+  const needs = deriveNeeds({ services, paperclip: pcl, diskFreeGB: s ? 11 : 86, spend, team });
   const up = pcl.up;
   return { checkedAt: new Date().toISOString(), startedAt: new Date().toISOString(), headline: headline(services, needs), needs, services, paperclip: { up, company: 'Emergen Engineering', error: pcl.error },
     crew: up ? c : c, recent: up ? [{ id: 'r1', agent: 'Frontend Engineer', status: 'running', at: new Date(Date.now() - 60e3).toISOString(), costUsd: null }, { id: 'r2', agent: 'QA', status: 'succeeded', at: new Date(Date.now() - 300e3).toISOString(), costUsd: 0.012, subscription: true }, { id: 'r3', agent: 'Docs', status: 'failed', at: new Date(Date.now() - 3600e3).toISOString(), costUsd: 0.041, subscription: true }] : [],
     approvalsPending: pcl.approvalsPending, runs: up ? { today: 3, month: 41 } : null,
-    spend, cost, activity: buildActivity(L.cache, L.byId, [{ id: 'p1', status: 'pending', createdAt: new Date().toISOString(), title: 'Approve merging EME-42 to staging and deploying to the client demo environment', requestedByAgentId: 'a6' }], 40), disk: { cFreeGB: s ? 11 : 86 } };
+    team, spend, cost, activity: buildActivity(L.cache, L.byId, [{ id: 'p1', status: 'pending', createdAt: new Date().toISOString(), title: 'Approve merging EME-42 to staging and deploying to the client demo environment', requestedByAgentId: 'a6' }], 40), disk: { cFreeGB: s ? 11 : 86 } };
 }
 
 let current = 'ok';

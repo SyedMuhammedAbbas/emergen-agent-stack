@@ -54,7 +54,7 @@ function crewCard() {
   const byDept = (k) => S.crew.filter((a) => profileOf(a.name)[0] === k);
   const word = { working: 'working', idle: 'idle', paused: 'paused', error: 'needs attention' };
   const groups = DEPTS.map(([k, n]) => { const list = byDept(k); return list.length ? `<div class="dept" style="--c:${ACCENT[k]}"><h3>${n}</h3><div class="crabs">${list.map((a) => `<span class="crabbtn" title="${esc(a.name)}, ${word[a.mood]}">${crabSvg(a.name, a.mood, `${a.name}, ${word[a.mood]}`)}</span>`).join('')}</div></div>` : ''; }).join('');
-  return `<section class="card" aria-labelledby="h-crew"><h2 id="h-crew">Crew</h2>${S.crew.length ? `<div class="crew">${groups}</div><p class="tiles-note">The same crabs as the Claude mod. Walking means working, dim means idle, red means it needs attention.</p>` : '<p class="hint">No agents to show.</p>'}</section>`;
+  return `<section class="card" aria-labelledby="h-crew"><h2 id="h-crew">Crew <a href="#/team">Open Team</a></h2>${S.crew.length ? `<div class="crew">${groups}</div><p class="tiles-note">The same crabs as the Claude mod. Walking means working, dim means idle, red means it needs attention.</p>` : '<p class="hint">No agents to show.</p>'}</section>`;
 }
 function recentCard() {
   const word = { succeeded: ['ok', 'Succeeded'], failed: ['fail', 'Failed'], running: ['ok', 'Working'], queued: ['idle', 'Queued'], cancelled: ['off', 'Cancelled'] };
@@ -194,8 +194,44 @@ function activity() {
   <div class="card flush">${rows ? `<div class="rows">${rows}</div>` : `<p class="hint" style="padding:18px">${all.length ? 'Nothing matches these filters.' : 'No runs or approvals yet.'}</p>`}</div>`;
 }
 
+// ---- Team (M2.2): agents joined with the reconciler's read-only plan ----
+const CHIP = { 'in-step': ['ok', 'In step'], edit: ['warn', 'Keeping your edit'], update: ['warn', 'Will update'], decision: ['fail', 'Needs a decision'], unmanaged: ['warn', 'Not managed'], unknown: ['', 'Checking…'] };
+const chip = (state) => { const [c, t] = CHIP[state] ?? CHIP.unknown; return `<span class="chip ${c}">${esc(t)}</span>`; };
+const MOODWORD = { working: 'working', idle: 'idle', paused: 'paused', error: 'needs attention' };
+let lastFocus = null;
+
+function team() {
+  const t = S.team, moods = Object.fromEntries(S.crew.map((c) => [c.id, c.mood]));
+  if (!t || !S.paperclip.up) return '<h1>Team</h1><p class="sub">Paperclip is not reachable, so the agents cannot be listed.</p>';
+  const dept = (a) => profileOf(a.name)[0];
+  const counts = Object.entries(t.counts).filter(([k]) => k !== 'in-step').map(([k, n]) => `${n} ${{ edit: 'keeping your edit', update: 'will update', decision: 'need a decision', unmanaged: 'not managed', unknown: 'unchecked' }[k]}`).join(' · ');
+  const status = t.available ? `${t.agents.length} agents. ${counts ? `${counts}.` : 'Every agent matches its template.'} Plan checked ${ago(t.ranAt)}.` : `${t.agents.length} agents. ${t.error ? `The plan could not be read: ${esc(t.error)}` : 'Reading the reconciler’s plan…'}`;
+  const groups = DEPTS.map(([k, n]) => { const list = t.agents.filter((a) => dept(a) === k); if (!list.length) return '';
+    return `<div class="sect" style="--c:${ACCENT[k]}">${n}</div>${list.map((a) => `<button class="rowbtn" data-agent="${esc(a.id)}" type="button"><div class="row teamrow deptbar" style="--c:${ACCENT[k]}"><span style="width:42px">${crabSvg(a.name, moods[a.id] ?? 'idle', `${a.name}, ${MOODWORD[moods[a.id] ?? 'idle']}`)}</span><span><span class="t">${esc(a.name)}</span><br><span class="s">${esc(a.title)}</span></span><span class="s mono-s">${esc(a.model)}</span><span>${chip(a.state)}</span><span class="s" aria-hidden="true">›</span></div></button>`).join('')}`; }).join('');
+  return `<h1>Team</h1><p class="sub">${status}</p><div class="card flush"><div class="rows">${groups}</div></div>
+  <p class="tiles-note">Agents follow the templates in <span class="mono">org/</span>. Edits you make in Paperclip are kept. Applying a change stays in the command line for now; open an agent to see the exact command.</p>`;
+}
+
+function openAgent(id) {
+  const a = S.team.agents.find((x) => x.id === id); if (!a) return;
+  const mood = S.crew.find((c) => c.id === id)?.mood ?? 'idle', d = DEPTS.find(([k]) => k === profileOf(a.name)[0]);
+  const OPWORD = { update: 'The template changed this', 'keep-live': 'You changed this in Paperclip', conflict: 'Both changed this', 'adopt-diff': 'Differs from the template' };
+  const changes = a.changes.map((c) => `<h2 style="margin:18px 0 6px">${esc(c.label)}</h2><p class="s" style="margin:0 0 6px">${esc(OPWORD[c.op] ?? c.op)}. ${esc(c.summary)}</p>${c.diff?.lines?.length ? `<div class="diff">${c.diff.lines.map((l) => `<div class="${l.t === '-' ? 'rm' : 'ad'}">${l.t} ${esc(l.s)}</div>`).join('')}${c.diff.more ? `<div class="s">…and ${c.diff.more} more changed lines</div>` : ''}</div>` : ''}`).join('');
+  const body = a.state === 'in-step' ? `<h2 style="margin-top:20px">Matches the template</h2><p class="s">No differences. Plan checked ${ago(S.team.ranAt)}.</p>`
+    : a.state === 'unmanaged' ? `<h2 style="margin-top:20px">Not managed</h2><p>${esc(a.note ?? '')} The reconciler leaves it alone, and the older sync still maintains it.</p>`
+    : a.state === 'unknown' ? '<h2 style="margin-top:20px">Plan not available yet</h2><p class="s">The reconciler’s plan has not been read, so differences cannot be shown.</p>'
+    : changes;
+  const cmd = a.command ? `<h2 style="margin:20px 0 6px">To apply it</h2><p class="s" style="margin:0 0 6px">Run this in PowerShell from the repo folder. Nothing changes until you do.</p><pre class="log" id="cmd">${esc(a.command)}</pre><p style="margin:10px 0 0"><button class="btn small" data-copy type="button">Copy command</button></p>` : '';
+  $('panel').innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div style="display:flex;gap:12px;align-items:center"><span style="width:56px">${crabSvg(a.name, mood, `${a.name}, ${MOODWORD[mood]}`)}</span><div><h3 id="ptitle">${esc(a.name)}</h3><div class="s">${esc(a.title)}${d ? ` · ${d[1]}` : ''}</div></div></div><button class="btn small" data-close-panel type="button">Close</button></div>
+   <dl style="display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:20px 0 0"><dt class="s">Model</dt><dd class="mono" style="margin:0">${esc(a.model)}</dd><dt class="s">State</dt><dd style="margin:0">${MOODWORD[mood]}</dd><dt class="s">Budget</dt><dd class="mono" style="margin:0">$${a.budgetUsd.toFixed(2)} / month</dd>${a.reportsTo ? `<dt class="s">Reports to</dt><dd style="margin:0">${esc(a.reportsTo)}</dd>` : ''}<dt class="s">Template</dt><dd style="margin:0">${chip(a.state)}</dd></dl>${body}${cmd}
+   <p style="margin-top:22px"><a href="http://localhost:3100/" target="_blank" rel="noopener" class="s">Open Paperclip ↗</a></p>`;
+  lastFocus = document.activeElement; setPanel(true); $('panel').querySelector('[data-close-panel]').focus();
+}
+function setPanel(on) { $('panel').classList.toggle('open', on); $('panel').setAttribute('aria-hidden', String(!on)); $('scrim').classList.toggle('on', on); if (!on && lastFocus?.isConnected) lastFocus.focus(); }
+
 // ---- shell ----
 const ROUTES = { home: ['Home', home, 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'], services: ['Services', services, 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6'],
+  team: ['Team', team, 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0'],
   cost: ['Cost', cost, 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.3 5 3.3-2.2 3-5 3-5-1.1-5-3'], activity: ['Activity', activity, 'M3 12h4l3-8 4 16 3-8h4'] };
 const icon = (p) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${p}"/></svg>`;
 const route = () => { const h = (location.hash.replace(/^#\/?/, '') || 'home').split('/')[0]; return ROUTES[h] ? h : 'home'; };
@@ -226,10 +262,15 @@ async function load() {
 function applyTheme() { document.documentElement.dataset.theme = THEME || ''; const dark = THEME === 'dark' || (!THEME && matchMedia('(prefers-color-scheme:dark)').matches); $('theme').textContent = dark ? 'Light mode' : 'Dark mode'; }
 $('theme').onclick = () => { const dark = document.documentElement.dataset.theme === 'dark' || (!THEME && matchMedia('(prefers-color-scheme:dark)').matches); THEME = dark ? 'light' : 'dark'; try { localStorage.setItem('theme', THEME); } catch { /* ignore */ } applyTheme(); };
 document.addEventListener('change', (e) => { const f = e.target.dataset?.filter; if (f) { FILTER[f] = e.target.value; paint(); } });
-addEventListener('hashchange', () => { paint(); scrollTo(0, 0); });
+addEventListener('hashchange', () => { setPanel(false); paint(); scrollTo(0, 0); });
+$('scrim').onclick = () => setPanel(false);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setPanel(false); });
 $('logo').innerHTML = crab('Manager', 'working');
 $('railclock').textContent = 'v0.1';
 document.addEventListener('click', (e) => {
+  const ag = e.target.closest('[data-agent]'); if (ag) return openAgent(ag.dataset.agent);
+  if (e.target.closest('[data-close-panel]')) return setPanel(false);
+  const cp = e.target.closest('[data-copy]'); if (cp) { navigator.clipboard?.writeText($('cmd').textContent).then(() => toast('Command copied.'), () => toast('Select the command and copy it.', true)); return; }
   const t = e.target.closest('[data-act],[data-logs],[data-doctor]'); if (!t || t.disabled) return;
   if (t.dataset.act) { const [action, service] = t.dataset.act.split(':'); return askAction(service, action); }
   if (t.dataset.logs) return toggleLogs(t.dataset.logs);

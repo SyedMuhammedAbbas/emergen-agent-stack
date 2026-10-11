@@ -3,7 +3,7 @@
 
 /** @returns {{ level:'ok'|'warn'|'fail', text:string }[]} each item: what, and why it matters / what is safe */
 const can = (s, a) => (s.actions ?? []).includes(a);   // the same list the server enforces
-export function deriveNeeds({ services, paperclip, diskFreeGB, spend }) {
+export function deriveNeeds({ services, paperclip, diskFreeGB, spend, team }) {
   const needs = [];
   const by = Object.fromEntries(services.map((s) => [s.id, s]));
   if (by.wsl?.state === 'fail') {
@@ -22,6 +22,8 @@ export function deriveNeeds({ services, paperclip, diskFreeGB, spend }) {
     if (paperclip.approvalsPending > 0) needs.push({ id: 'approvals', level: 'warn', title: `${paperclip.approvalsPending} approval${paperclip.approvalsPending > 1 ? 's' : ''} waiting for you`, why: 'Agents are waiting for a decision.', hint: 'Open Paperclip to approve or reject.' });
     for (const a of (paperclip.crew ?? []).filter((c) => c.mood === 'error')) needs.push({ id: 'agent-' + a.id, level: 'fail', title: `${a.name} is in an error state`, why: 'It stopped after a failed run.', hint: 'Open it in Paperclip to see the log.' });
   }
+  const dec = (team?.agents ?? []).filter((a) => a.state === 'decision');
+  if (dec.length) needs.push({ id: 'plan-decisions', level: 'warn', title: `${dec.length} agent${dec.length > 1 ? 's need' : ' needs'} a decision (${dec.slice(0, 3).map((a) => a.name).join(', ')}${dec.length > 3 ? ', …' : ''})`, why: 'The template and Paperclip both changed the same setting. Nothing is applied until you choose.', hint: 'Open Team to see the difference.' });
   if (spend && spend.level !== 'ok') needs.push({ id: 'budget', level: spend.level, title: spend.level === 'fail' ? `Spend has passed your $${spend.budgetUsd} monthly budget` : `Spend is at ${spend.pct}% of your $${spend.budgetUsd} monthly budget`, why: `$${spend.monthUsd.toFixed(2)} this month${spend.projectedUsd ? `; on pace for about $${spend.projectedUsd}` : ''}.`, hint: 'Review Cost, or make the agents less active.' });
   if (diskFreeGB != null && diskFreeGB < 15) needs.push({ id: 'disk', level: diskFreeGB < 5 ? 'fail' : 'warn', title: `C: has only ${diskFreeGB} GB free`, why: "WSL's disk lives on C: and goes read-only when it fills up.", hint: 'Free some space (see docs/operations.md).' });
   return needs.sort((a, b) => (a.level === 'fail' ? 0 : 1) - (b.level === 'fail' ? 0 : 1));
