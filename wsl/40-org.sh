@@ -54,6 +54,13 @@ while read -r key slug; do
   SKILL_KEY[$slug]=$key
 done < <(paperclipai skills list -C "$CID" | sed -n 's/.* key=\([^ ]*\) slug=\([^ ]*\) .*/\1 \2/p')
 
+if [ "${RECONCILER:-0}" = 1 ]; then
+# ---- agents + routines through the reconciler (config.env: RECONCILER=1; see docs/reconciler.md) ----
+# Keeps edits made in the Paperclip UI, applies only what the templates changed, and journals every write
+# (undo with: node apps/cli/stack.mjs rollback). Agents that need a decision are skipped; run `stack plan` to see them.
+bash "$REPO_DIR/wsl/41-render.sh" || die "rendering the desired state failed"
+node "$REPO_DIR/apps/cli/stack.mjs" apply --yes ${STACK_APPLY_ARGS:-} || die "the reconciler stopped (see above; 'stack rollback' undoes what it wrote)"
+else
 # ---- agents ----
 render() { render_role "$1"; }
 
@@ -141,6 +148,8 @@ for key in $(jq -r '.agents[] | select(.routine) | .key' "$ORG"); do
   ids=$(jq -c --arg k "$key" --arg r "$rid" --arg t "$tid" '.routines[$k] = {id:$r, trigger:$t}' <<<"$ids"); save
   printf '  routine  %-18s %s (%s)\n' "$(jq -r .title <<<"$r")" "$cron" "${TIMEZONE:-UTC}"
 done
+
+fi  # end of the non-reconciler agents + routines path
 
 # Stop hook: agents may not end a run while a build/test they started is still running
 mkdir -p ~/.claude/hooks
