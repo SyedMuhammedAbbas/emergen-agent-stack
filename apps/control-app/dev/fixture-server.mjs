@@ -8,6 +8,7 @@ import { createServer } from '../server.mjs';
 import { deriveNeeds, headline } from '../src/needs.mjs';
 import { loadCache, mergeRuns, buildCost, buildActivity } from '../src/costs.mjs';
 import { buildTeam } from '../src/team.mjs';
+import { pathsOf, tiersOf } from '../src/models.mjs';
 
 const svc = (id, title, about, kind, state, extra = {}) => ({ id, title, about, kind, port: null, state, text: { ok: 'Running', fail: 'Stopped', unknown: 'Unknown (WSL is down)', off: 'Not set up', warn: 'Running but not answering' }[state], ...extra });
 const crew = (down) => ['Manager|Engineering Manager', 'CTO|CTO', 'Frontend Engineer|Frontend', 'Backend Engineer|Backend', 'DevOps Engineer|DevOps', 'SecOps Engineer|SecOps', 'QA|QA', 'UX Reviewer|UX', 'Docs|Docs', 'Estimator|Estimator', 'Chief of Staff|CoS', 'Timekeeper|TK', 'Watchdog|WD', 'Brand Lead|BL', 'Designer|D', 'Video Generator|VG', 'Orrisian Content|OC', 'Upwork Scout|US']
@@ -38,6 +39,17 @@ function teamFor(c, name) {
   return buildTeam(raw, name === 'wsl' || name === 'paperclip' ? null : plan, { ranAt: new Date().toISOString(), error: name === 'wsl' ? 'WSL is down' : null });
 }
 
+function modelsFor(name, team) {
+  const down = name === 'wsl' || name === 'paperclip' && false;
+  const cfg = { tiers: ['fast', 'balanced', 'frontier'], defaultTier: 'balanced', baselineModel: { anthropic: 'claude-opus-5-5' }, modelPins: { fable: 'frontier', opus: 'frontier', sonnet: 'balanced', haiku: 'fast' }, policy: { mode: 'ratchet', accept: { fast: 0.85, balanced: 0.6, frontier: 0.3 } } };
+  const now = Date.now(), rec = (m, tier, model, reason) => ({ at: new Date(now - m * 60000).toISOString(), tier, model, reason });
+  return { router: { up: !down, version: '1.6.0', uptimeSec: 6574, sessions: 3, active: 1,
+      jev: { configured: true, channels: [{ name: 'openrouter', calls: 412, errors: name === 'svc' ? 300 : 3, open: name === 'svc', lastError: 'HTTP 429 from the provider, retry after a long and detailed explanation that goes on and on' }] },
+      config: down ? null : { ...cfg, tiers: tiersOf(cfg) }, last24h: down ? { total: 0, byTier: {}, byModel: {} } : { total: 412, byTier: { fast: 120, balanced: 250, frontier: 42 }, byModel: {} },
+      recent: down ? [] : [rec(2, 'balanced', 'claude-sonnet-5', 'Routine edit within one file, with a deliberately long explanation to test wrapping on narrow screens'), rec(9, 'frontier', 'claude-opus-5-5', 'Cross-module refactor'), rec(15, 'fast', 'claude-haiku-4-5', 'Find a file path')] },
+    omniroute: { up: name !== 'svc' && !down }, paths: pathsOf(team.agents) };
+}
+
 function scenario(name) {
   const w = name === 'wsl', s = name === 'svc', p = name === 'paperclip';
   const wslState = w ? 'fail' : 'ok', inWsl = (st) => (w ? 'unknown' : st);
@@ -59,7 +71,7 @@ function scenario(name) {
   return { checkedAt: new Date().toISOString(), startedAt: new Date().toISOString(), headline: headline(services, needs), needs, services, paperclip: { up, company: 'Emergen Engineering', error: pcl.error },
     crew: up ? c : c, recent: up ? [{ id: 'r1', agent: 'Frontend Engineer', status: 'running', at: new Date(Date.now() - 60e3).toISOString(), costUsd: null }, { id: 'r2', agent: 'QA', status: 'succeeded', at: new Date(Date.now() - 300e3).toISOString(), costUsd: 0.012, subscription: true }, { id: 'r3', agent: 'Docs', status: 'failed', at: new Date(Date.now() - 3600e3).toISOString(), costUsd: 0.041, subscription: true }] : [],
     approvalsPending: pcl.approvalsPending, runs: up ? { today: 3, month: 41 } : null,
-    team, spend, cost, activity: buildActivity(L.cache, L.byId, [{ id: 'p1', status: 'pending', createdAt: new Date().toISOString(), title: 'Approve merging EME-42 to staging and deploying to the client demo environment', requestedByAgentId: 'a6' }], 40), disk: { cFreeGB: s ? 11 : 86 } };
+    models: modelsFor(name, team), team, spend, cost, activity: buildActivity(L.cache, L.byId, [{ id: 'p1', status: 'pending', createdAt: new Date().toISOString(), title: 'Approve merging EME-42 to staging and deploying to the client demo environment', requestedByAgentId: 'a6' }], 40), disk: { cFreeGB: s ? 11 : 86 } };
 }
 
 let current = 'ok';

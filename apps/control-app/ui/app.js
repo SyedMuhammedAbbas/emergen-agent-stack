@@ -229,18 +229,51 @@ function openAgent(id) {
 }
 function setPanel(on) { $('panel').classList.toggle('open', on); $('panel').setAttribute('aria-hidden', String(!on)); $('scrim').classList.toggle('on', on); if (!on && lastFocus?.isConnected) lastFocus.focus(); }
 
+// ---- Models (M2.5): how Claude agents are routed, and the gateway for other models ----
+const TIERNAME = { fast: 'Fast', balanced: 'Balanced', frontier: 'Frontier', max: 'Max' };
+function models() {
+  const m = S.models;
+  if (!m) return '<h1>Models</h1><p class="sub">Reading how models are routed…</p>';
+  const r = m.router, cfg = r.config, svc = (id) => S.services.find((s) => s.id === id);
+  const jevSvc = svc('jev'), omniSvc = svc('omniroute');
+  const maxTier = Math.max(1, ...Object.values(r.last24h.byTier));
+  const base = cfg?.baselineModel && typeof cfg.baselineModel === 'object' ? Object.values(cfg.baselineModel)[0] : cfg?.baselineModel;
+  const channels = r.jev ? (r.jev.channels.length ? r.jev.channels.map((c) => lamp(c.open || c.errors > c.calls / 2 ? 'warn' : 'ok', c.name + ': ' + c.calls + ' call' + (c.calls === 1 ? '' : 's') + ', ' + c.errors + ' error' + (c.errors === 1 ? '' : 's') + (c.open ? ' (paused after errors)' : ''))).join('<br>') : lamp('off', 'Jev is not connected')) : lamp('off', 'Jev status unavailable');
+  const tiers = cfg ? '<div class="rows" style="border:1px solid var(--line-2);border-radius:8px;margin-top:12px">' + cfg.tiers.map((t) => '<div class="row" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr) auto;padding:10px 14px"><span class="t">' + esc(TIERNAME[t.tier] ?? t.tier) + (t.isDefault ? ' <span class="chip">starts here</span>' : '') + '</span><span class="mono-s">' + esc(t.models.join(', ') || '-') + '</span><span class="s">needs ' + Math.round((t.confidence ?? 0) * 100) + '% sure</span></div>').join('') + '</div><p class="tiles-note">Policy: ' + esc(cfg.policy.mode) + (cfg.policy.mode === 'ratchet' ? ' (it decides again at each of your messages and only ever moves up to a stronger model)' : '') + '. The percentage is the minimum probability Jev must give a tier before it is chosen; cheaper tiers need more.' + (base ? ' Baseline for savings: ' + esc(base) + '.' : '') + '</p>' : '<p class="hint">The router’s settings could not be read.</p>';
+  const decisions = r.recent.length ? '<ul class="need" style="gap:0;margin-top:6px">' + r.recent.map((d) => '<li style="grid-template-columns:minmax(0,1fr) auto;padding:8px 0"><span><span class="chip">' + esc(TIERNAME[d.tier] ?? d.tier) + '</span> <span class="mono-s">' + esc(d.model ?? '') + '</span>' + (d.reason ? '<br><span class="s">' + esc(d.reason) + '</span>' : '') + '</span><span class="s mono-s">' + ago(d.at) + '</span></li>').join('') + '</ul>' : '';
+  const tally = r.last24h.total ? '<div style="margin-top:12px">' + Object.entries(r.last24h.byTier).map(([t, n]) => '<div style="display:grid;grid-template-columns:90px 1fr auto;gap:10px;align-items:center;margin:4px 0"><span class="s">' + esc(TIERNAME[t] ?? t) + '</span><span class="meter" style="margin:0"><span style="width:' + (n / maxTier) * 100 + '%"></span></span><span class="mono-s">' + n + '</span></div>').join('') + '</div>' : '<p class="hint" style="margin-top:12px">No routed messages in the last 24 hours. Engineers use the router the next time they run.</p>';
+  const group = (title, list, none) => '<div style="margin:0 0 14px"><h2 style="margin-bottom:8px">' + title + ' (' + list.length + ')</h2>' + (list.length ? '<div class="crabs" style="gap:8px">' + list.map((a) => '<span class="chip" title="' + esc(a.model) + '">' + esc(a.name) + '</span>').join('') + '</div>' : '<p class="hint">' + none + '</p>') + '</div>';
+  const spend = (S.cost?.byModel ?? []).length ? '<div class="rows">' + S.cost.byModel.map((x) => '<div class="row" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto"><span class="mono-s">' + esc(x.model) + '</span><span class="s">' + x.runs + ' run' + (x.runs === 1 ? '' : 's') + '</span><span class="mono">' + usd(x.usd) + '</span></div>').join('') + '</div>' : '<p class="hint" style="padding:0 18px 18px">No spend yet this month.</p>';
+  return '<h1>Models</h1><p class="sub">Two separate paths, never chained. Agents that use the router go through jev-router; other models go through OmniRoute. Some agents call Claude directly with a fixed model.</p>' +
+  '<div class="grid g2">' +
+    '<section class="card" aria-labelledby="h-jev"><h2 id="h-jev">Claude, through jev-router</h2><p style="margin:0 0 8px">' + lamp(jevSvc?.state ?? (r.up ? 'ok' : 'fail'), jevSvc?.text) + '</p>' +
+      '<p class="s" style="margin:0 0 4px">' + (r.up ? 'Version ' + esc(r.version) + ' · up ' + dur(r.uptimeSec) + ' · ' + r.sessions + ' session' + (r.sessions === 1 ? '' : 's') + ', ' + r.active + ' active' : 'Not answering.') + '</p>' +
+      '<p class="s" style="margin:10px 0 0">Jev (the model that picks the tier):</p><p style="margin:2px 0 0">' + channels + '</p>' + tiers + '</section>' +
+    '<section class="card" aria-labelledby="h-omni"><h2 id="h-omni">Other models, through OmniRoute</h2><p style="margin:0 0 8px">' + lamp(omniSvc?.state ?? (m.omniroute.up ? 'ok' : 'fail'), omniSvc?.text) + '</p>' +
+      '<p class="s">OmniRoute picks a provider and falls back when one reaches its limit. Its providers and combinations are behind its own sign-in, so they are not listed here. Add or review them in its dashboard.</p>' +
+      '<p style="margin:12px 0 0"><a class="btn" href="http://localhost:20128/" target="_blank" rel="noopener">Open the OmniRoute dashboard ↗</a></p></section>' +
+  '</div>' +
+  '<div class="grid g2" style="margin-top:16px">' +
+    '<section class="card" aria-labelledby="h-24"><h2 id="h-24">Routed in the last 24 hours</h2><p style="margin:0"><span class="big" style="font-size:30px">' + r.last24h.total + '</span> <span class="of">message' + (r.last24h.total === 1 ? '' : 's') + '</span></p>' + tally + decisions + '</section>' +
+    '<section class="card" aria-labelledby="h-paths"><h2 id="h-paths">Which agents use which path</h2>' + group('Through jev-router', m.paths.jev, 'None.') + group('Direct to Claude, fixed model', m.paths.direct, 'None.') + group('Through OmniRoute', m.paths.omni, 'None yet.') + '</section>' +
+  '</div>' +
+  '<section class="card flush" style="margin-top:16px" aria-labelledby="h-sm"><div style="padding:18px 18px 4px"><h2 id="h-sm">Spend by model this month</h2></div>' + spend + '</section>';
+}
+
 // ---- shell ----
 const ROUTES = { home: ['Home', home, 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'], services: ['Services', services, 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6'],
   team: ['Team', team, 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0'],
-  cost: ['Cost', cost, 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.3 5 3.3-2.2 3-5 3-5-1.1-5-3'], activity: ['Activity', activity, 'M3 12h4l3-8 4 16 3-8h4'] };
+  cost: ['Cost', cost, 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.3 5 3.3-2.2 3-5 3-5-1.1-5-3'], models: ['Models', models, 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5'],
+  activity: ['Activity', activity, 'M3 12h4l3-8 4 16 3-8h4'] };
 const icon = (p) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${p}"/></svg>`;
 const route = () => { const h = (location.hash.replace(/^#\/?/, '') || 'home').split('/')[0]; return ROUTES[h] ? h : 'home'; };
 
 function paint() {
   const r = route(), badge = S?.needs.length ?? 0;
   $('nav').innerHTML = Object.entries(ROUTES).map(([k, v]) => `<a href="#/${k}" ${k === r ? 'aria-current="page"' : ''}>${icon(v[2])}<span>${v[0]}</span>${k === 'home' && badge ? `<b class="badge" aria-label="${badge} need you">${badge}</b>` : ''}</a>`).join('');
-  $('tabs').style.gridTemplateColumns = `repeat(${Object.keys(ROUTES).length},1fr)`;
-  $('tabs').innerHTML = Object.entries(ROUTES).map(([k, v]) => `<a href="#/${k}" ${k === r ? 'aria-current="page"' : ''}>${icon(v[2])}${v[0]}</a>`).join('');
+  const MORE = ['activity', 'models'], main4 = Object.entries(ROUTES).filter(([k]) => !MORE.includes(k));
+  $('tabs').style.gridTemplateColumns = 'repeat(' + (main4.length + 1) + ',1fr)';
+  $('tabs').innerHTML = main4.map(([k, v]) => '<a href="#/' + k + '" ' + (k === r ? 'aria-current="page"' : '') + '>' + icon(v[2]) + v[0] + '</a>').join('') + '<button type="button" data-more ' + (MORE.includes(r) ? 'aria-current="page"' : '') + '>' + icon('M4 7h16M4 12h16M4 17h16') + 'More</button>';
   const main = $('main');
   if (failure) main.innerHTML = `<h1>Cannot read the stack</h1><div class="err" role="alert"><p><b>${esc(failure.title)}</b></p><p class="hint">${esc(failure.hint)}</p></div>`;
   else if (!S) main.innerHTML = '<p style="color:var(--ink-3)">Loading…</p>';
@@ -268,6 +301,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setPanel(f
 $('logo').innerHTML = crab('Manager', 'working');
 $('railclock').textContent = 'v0.1';
 document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-more]')) { const d = $('dlg'); d.innerHTML = '<h3>More</h3><p style="display:flex;flex-direction:column;gap:8px"><a class="btn" href="#/activity">Activity</a><a class="btn" href="#/models">Models</a></p><div class="acts"><button class="btn" type="button" data-x>Close</button></div>'; d.querySelectorAll('a,[data-x]').forEach((b) => { b.onclick = () => d.close(); }); d.showModal(); return; }
   const ag = e.target.closest('[data-agent]'); if (ag) return openAgent(ag.dataset.agent);
   if (e.target.closest('[data-close-panel]')) return setPanel(false);
   const cp = e.target.closest('[data-copy]'); if (cp) { navigator.clipboard?.writeText($('cmd').textContent).then(() => toast('Command copied.'), () => toast('Select the command and copy it.', true)); return; }

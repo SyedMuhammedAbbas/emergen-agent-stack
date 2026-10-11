@@ -1,6 +1,6 @@
 # Agent Stack control app
 
-Status page for the stack: are the services running, what is it costing, what needs you. **Version 0.4** (Home, Services with control, Team, Cost, Activity). Everything on Home is read-only; the only things it can change are starting, stopping and restarting the services listed below. Design: [docs/architecture/15-m2-design.md](../../docs/architecture/15-m2-design.md); plan: [14-m2-plan.md](../../docs/architecture/14-m2-plan.md).
+Status page for the stack: are the services running, what is it costing, what needs you. **Version 0.5** (Home, Services with control, Team, Cost, Activity, Models). Everything on Home is read-only; the only things it can change are starting, stopping and restarting the services listed below. Design: [docs/architecture/15-m2-design.md](../../docs/architecture/15-m2-design.md); plan: [14-m2-plan.md](../../docs/architecture/14-m2-plan.md).
 
 ```
 app.cmd                      (repo root) starts it and opens your browser
@@ -19,6 +19,10 @@ It runs on **Windows** (so it can still report when WSL is down), listens on `12
 | Keepalive, Hermes tasks | `schtasks /query` (no admin) | ~30 ms |
 | Crew, runs, spend, approvals | Paperclip API (`/agents`, `/heartbeat-runs`, `/approvals`) | ~20 ms |
 | C: free space | `statfs` | instant |
+
+## Models
+
+How Claude agents are routed, and whether the gateway for other models is up. Read-only and secret-free. From jev-router: its `/healthz` (version, uptime, sessions, Jev calls and errors per channel), a jq-filtered slice of its config (tiers, model pins, the minimum probability each tier needs; the filter leaves out keys and key names) and the `route` events in its log (tier, model, a short redacted reason) for a 24-hour tally and the latest decisions. From OmniRoute: only `/api/health`; its providers and combinations need its own sign-in, so the page links to its dashboard instead. It also lists which agents go through jev-router, which call Claude directly with a fixed model, and which would use OmniRoute, plus spend by model this month. Refreshed in the background about every 30 seconds.
 
 ## Team
 
@@ -49,7 +53,7 @@ Spend is summed from each run's `usageJson.costUsd` (what it would cost at API p
 ## Tests
 
 ```
-node --test apps/control-app/test/app.test.mjs apps/control-app/test/actions.test.mjs apps/control-app/test/costs.test.mjs apps/control-app/test/team.test.mjs
+node --test apps/control-app/test/app.test.mjs apps/control-app/test/actions.test.mjs apps/control-app/test/costs.test.mjs apps/control-app/test/team.test.mjs apps/control-app/test/models.test.mjs
 node apps/control-app/dev/fixture-server.mjs      # the real UI on synthetic problem states (ok, svc, wsl, paperclip)
 ```
 
