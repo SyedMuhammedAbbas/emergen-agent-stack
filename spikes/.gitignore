@@ -1,0 +1,6 @@
+# Throwaway spike data: keep scripts, ignore artifacts
+native-win/
+m0-export-*/
+*.out
+*.err
+pw.txt
