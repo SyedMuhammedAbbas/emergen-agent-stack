@@ -12,12 +12,13 @@ import { createActions } from './src/actions.mjs';
 import { readLogs } from './src/logs.mjs';
 import { runDoctor } from './src/doctor.mjs';
 import { createSafetyActions } from './src/safety.mjs';
+import { createSetup } from './src/setup.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2' };
 
-export function createServer({ store, token = crypto.randomBytes(16).toString('hex'), uiDir = path.join(here, 'ui'), actions, audit, settings, safety, repo = path.resolve(here, '..', '..'), io }) {
-  const readJson = async (req) => { let s = ''; for await (const c of req) { s += c; if (s.length > 10_000) throw new Error('request too large'); } try { return s ? JSON.parse(s) : {}; } catch { throw new Error('bad JSON'); } };
+export function createServer({ store, token = crypto.randomBytes(16).toString('hex'), uiDir = path.join(here, 'ui'), actions, audit, settings, safety, setup, repo = path.resolve(here, '..', '..'), io }) {
+  const readJson = async (req) => { let s = ''; for await (const c of req) { s += c; if (s.length > 40_000) throw new Error('request too large'); } try { return s ? JSON.parse(s) : {}; } catch { throw new Error('bad JSON'); } };
   const send = (res, code, data) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(data)); };
   const server = http.createServer(async (req, res) => {
     try {
@@ -29,11 +30,16 @@ export function createServer({ store, token = crypto.randomBytes(16).toString('h
         if (url.pathname === '/api/state' && req.method === 'GET') return send(res, 200, await store.get());
         if (url.pathname === '/api/audit' && req.method === 'GET' && audit) return send(res, 200, audit.recent(Math.min(50, Number(url.searchParams.get('n')) || 10)));
         if (url.pathname === '/api/logs' && req.method === 'GET' && settings) return send(res, 200, await readLogs(String(url.searchParams.get('service') ?? ''), settings, { exec: io?.exec }));
+        if (url.pathname === '/api/setup/options' && req.method === 'GET' && setup) return send(res, 200, setup.options());
+        const jm = url.pathname.match(/^\/api\/setup\/job\/([a-f0-9]+)$/);
+        if (jm && req.method === 'GET' && setup) { const { status, ...rest } = setup.job(jm[1], Number(url.searchParams.get('from')) || 0); return send(res, status, rest); }
         if (req.method === 'POST') {
           if (!/^application\/json/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'JSON only' });
           const b = await readJson(req);
           if (url.pathname === '/api/action' && actions) { const r = await actions.run({ service: String(b.service ?? ''), action: String(b.action ?? ''), force: b.force === true }); const { status, ...rest } = r; return send(res, status, rest); }
           if (url.pathname === '/api/safety' && safety) { const r = await safety.run({ action: String(b.action ?? '') }); const { status, ...rest } = r; return send(res, status, rest); }
+          const sm = url.pathname.match(/^\/api\/setup\/(interpret|preview|apply)$/);
+          if (sm && setup) { const r = await (sm[1] === 'interpret' ? setup.interpret({ text: b.text, useModel: b.useModel !== false }) : setup[sm[1]]({ requirements: b.requirements, hash: b.hash })); const { status, ...rest } = r; return send(res, status, rest); }
           if (url.pathname === '/api/doctor' && settings) return send(res, 200, await runDoctor({ settings, state: await store.get(), repo, io }));
         }
         return send(res, 404, { error: 'not found' });
@@ -54,7 +60,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const settings = loadSettings({ repo }), store = createStore({ settings });
   const audit = createAudit(appDirOf(settings)), actions = createActions({ settings, store, audit });
   const safety = createSafetyActions({ settings, audit, appDir: appDirOf(settings), refresh: () => store.refreshSafety() });
-  const { server, token } = createServer({ store, actions, audit, settings, repo, safety });
+  const setup = createSetup({ repo, audit });
+  const { server, token } = createServer({ store, actions, audit, settings, repo, safety, setup });
   const want = Number(process.argv[process.argv.indexOf('--port') + 1]) || 4790;
   let port = want;
   server.on('error', (e) => { if (e.code === 'EADDRINUSE' && port < want + 10) server.listen(++port, '127.0.0.1'); else throw e; });

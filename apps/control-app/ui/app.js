@@ -296,11 +296,93 @@ function safetyScreen() {
     '<p class="tiles-note">Paths and permissions only; file contents are never read here. Windows file permissions are not checked.</p>';
 }
 
+// ---- Set up (M3): describe -> review the blueprint -> approve -> apply ----
+const SETUP = { step: 'describe', text: '', req: null, bp: null, errors: [], via: '', note: '', busy: false, opts: null, job: null };
+const AUTONOMY_WORD = { quiet: 'Quiet: wakes only when asked', balanced: 'Balanced', watchful: 'Watchful: checks in often' };
+async function setupInit() { if (SETUP.opts) return; const r = await api('/api/setup/options'); if (r.status === 200) { SETUP.opts = r.json; if (route() === 'setup') paint(); } }
+async function setupPreview(req) {
+  SETUP.busy = true; paint();
+  const r = await api('/api/setup/preview', { requirements: req });
+  SETUP.busy = false; SETUP.errors = r.json.errors ?? (r.json.error ? [r.json.error] : []);
+  if (r.json.ok) { SETUP.req = req; SETUP.bp = r.json.blueprint; SETUP.step = 'review'; }
+  paint();
+}
+async function setupInterpret() {
+  if (!SETUP.text.trim()) { toast('Describe what you want first.', true); return; }
+  SETUP.busy = true; SETUP.errors = []; paint();
+  const r = await api('/api/setup/interpret', { text: SETUP.text });
+  SETUP.busy = false; SETUP.via = r.json.via ?? ''; SETUP.note = r.json.note ?? '';
+  if (r.json.ok) return setupPreview(r.json.requirements);
+  SETUP.errors = r.json.errors ?? [r.json.error ?? 'That could not be read.']; paint();
+}
+function setupPreset(id) {
+  const p = SETUP.opts.presets.find((x) => x.id === id);
+  setupPreview({ schemaVersion: 1, kind: p.kind, name: p.kind === 'personal' ? '' : (SETUP.req?.name || 'My company'), goals: [p.title], departments: p.departments, tools: p.tools, autonomy: 'balanced', budgetMonthlyUsd: 100, personal: { organizer: p.tools.includes('downloads-organizer') }, unknowns: [] });
+}
+function setupEdit(field, value) {
+  const q = structuredClone(SETUP.req);
+  if (field === 'name') q.name = value; else if (field === 'autonomy') q.autonomy = value; else if (field === 'budget') q.budgetMonthlyUsd = Number(value);
+  else if (field.startsWith('dept:')) { const d = field.slice(5); q.departments = value ? [...new Set([...q.departments, d])] : q.departments.filter((x) => x !== d); }
+  else if (field.startsWith('tool:')) { const t = field.slice(5); q.tools = value ? [...new Set([...q.tools, t])] : q.tools.filter((x) => x !== t); }
+  setupPreview(q);
+}
+async function setupApply() {
+  const r = await api('/api/setup/apply', { requirements: SETUP.req, hash: SETUP.bp.hash });
+  if (r.status !== 200) { toast(r.json.error ?? 'Could not start.', true); return; }
+  SETUP.step = 'apply'; SETUP.job = { id: r.json.job, steps: [], lines: [], done: false, next: 0 }; paint(); pollSetup();
+}
+async function pollSetup() {
+  const j = SETUP.job; if (!j || j.done) return;
+  const r = await api(`/api/setup/job/${j.id}?from=${j.next}`);
+  if (r.status === 200) { Object.assign(j, { steps: r.json.steps, done: r.json.done, next: r.json.next, manual: r.json.manual, dry: r.json.dry }); j.lines.push(...r.json.lines); }
+  if (route() === 'setup') paint(); if (!j.done) setTimeout(pollSetup, 1500);
+}
+function setupScreen() {
+  setupInit();
+  const o = SETUP.opts; if (!o) return '<h1>Set up</h1><p class="sub">Loading…</p>';
+  const err = SETUP.errors.length ? `<div class="err" role="alert">${SETUP.errors.map((e) => `<p>${esc(e)}</p>`).join('')}</div>` : '';
+  const busy = SETUP.busy ? '<p class="hint" aria-live="polite">Working…</p>' : '';
+  if (SETUP.step === 'describe') return `<h1>Set up</h1><p class="sub">Say what you want in your own words, or start from a template. You will see exactly what would be created and what it costs before anything happens.</p>
+    <section class="card"><label for="sdesc"><b>What do you want your agents to do?</b></label>
+    <textarea id="sdesc" class="field" rows="5" maxlength="4000" placeholder="For example: a small software agency called Acme. We want agents to build features, track time and report progress. Keep the cost low.">${esc(SETUP.text)}</textarea>
+    <p style="margin:10px 0 0"><button class="btn primary" type="button" data-setup="read" ${SETUP.busy ? 'disabled' : ''}>Read my description</button></p>${busy}${err}
+    <p class="hint">Never type passwords or keys here. A language model reads your text only to fill in a form; it cannot create permissions or run anything.</p></section>
+    <h2 style="margin-top:22px">Or start from a template</h2><div class="grid">${o.presets.map((p) => `<button class="tile" type="button" data-preset="${esc(p.id)}"><b>${esc(p.title)}</b><span class="s">${esc(p.blurb)}</span></button>`).join('')}</div>`;
+  if (SETUP.step === 'apply') {
+    const j = SETUP.job;
+    return `<h1>Setting up</h1><p class="sub">${j.done ? (j.dry ? 'Preview run finished: nothing was changed.' : (j.steps.some((s) => s.status === 'failed') ? 'Finished, but a step needs a look.' : 'Finished.')) : 'This can take several minutes. You can leave this page open.'}</p>
+      <section class="card"><div class="rows">${j.steps.map((s) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span class="t">${esc(s.title)}</span><span>${lamp(s.status === 'done' ? 'ok' : s.status === 'failed' ? 'fail' : s.status === 'running' ? 'warn' : 'off', { done: 'Done', failed: 'Did not finish', running: 'Running', waiting: 'Waiting' }[s.status])}</span></div>`).join('')}</div>
+      <pre class="log" tabindex="0" aria-label="Setup log">${esc(j.lines.slice(-60).join('\n'))}</pre></section>
+      ${j.done && j.manual?.length ? `<section class="card"><h2>Still to do by you</h2><div class="rows">${j.manual.map((m) => `<div class="row" style="grid-template-columns:1fr"><span><span class="t">${esc(m.title)}</span><br><span class="s">${esc(m.detail)}</span></span></div>`).join('')}</div></section>` : ''}
+      ${j.done ? '<p><a class="btn" href="#/team">See the team</a> <button class="btn" type="button" data-setup="again">Start over</button></p>' : ''}`;
+  }
+  const b = SETUP.bp, r = SETUP.req, v = b.validation, c = b.cost;
+  const deptBox = o.departments.map((d) => `<label class="chk"><input type="checkbox" data-sf="dept:${esc(d.key)}" ${b.departments.includes(d.key) ? 'checked' : ''} ${d.key === 'engineering' && b.departments.length > 1 ? 'disabled' : ''}> ${esc(d.name)} <span class="s">${d.agents} agent${d.agents === 1 ? "" : "s"}</span></label>`).join('');
+  const toolBox = o.tools.map((t) => `<label class="chk"><input type="checkbox" data-sf="tool:${esc(t.id)}" ${r.tools.includes(t.id) ? 'checked' : ''}> ${esc(t.title)}${t.external ? ' <span class="chip">asks first</span>' : ''}</label>`).join('');
+  const agents = b.agents.map((a) => `<span class="crabbtn" title="${esc(a.name)}, ${esc(a.title)}">${crabSvg(a.name, 'idle', `${a.name}, ${a.title}`)}</span>`).join('');
+  return `<h1>Review the plan</h1><p class="sub">${esc(b.workspace.name)}. Nothing has been created yet.${SETUP.note ? ' ' + esc(SETUP.note) : ''}</p>${err}${busy}
+    <section class="card"><h2>Your choices</h2>
+      ${b.workspace.kind !== 'personal' ? `<p><label for="sname">Company name</label> <input id="sname" class="field" data-sf="name" maxlength="80" value="${esc(r.name)}"></p><div class="chks">${deptBox}</div>` : ''}
+      <p><label for="sauto">Schedule</label> <select id="sauto" class="field" data-sf="autonomy">${Object.entries(AUTONOMY_WORD).map(([k, w]) => `<option value="${k}" ${k === r.autonomy ? 'selected' : ''}>${w}</option>`).join('')}</select>
+      <label for="sbud">Monthly budget (USD)</label> <input id="sbud" class="field" type="number" min="5" max="10000" data-sf="budget" value="${esc(r.budgetMonthlyUsd)}"></p>
+      <div class="chks">${toolBox}</div></section>
+    ${b.agents.length ? `<section class="card"><h2>${b.agents.length} agent${b.agents.length === 1 ? "" : "s"}</h2><div class="crabs">${agents}</div><p class="hint">${esc(b.departments.join(', '))}</p></section>` : ''}
+    <section class="card"><h2>What it costs</h2><p class="big">about ${usd(c.idleUsd)} <span class="s">a month while idle (${usd(c.idleRangeUsd[0])} to ${usd(c.idleRangeUsd[1])})</span></p>
+      <p class="s">${c.parts.map((p) => `${esc(p.label)} ${usd(p.usd)}`).join(' · ') || 'No scheduled routines.'}</p><p class="hint">Your hard limit is ${usd(b.budget.monthlyUsd)} a month; agents together are capped at ${usd(c.capsUsd)}. ${esc(c.note)}</p></section>
+    <section class="card"><h2>What will not happen without you</h2><ul class="plain"><li>${esc(b.policy.note)}</li>${b.tools.map((t) => `<li>${esc(t.title)}: ${t.external ? 'every action asks you first' : 'runs on this computer only'}.</li>`).join('')}${b.manual.map((m) => `<li><b>${esc(m.title)}</b>: ${esc(m.detail)}</li>`).join('')}</ul></section>
+    <section class="card"><h2>Steps that will run</h2><div class="rows">${b.actions.map((a) => `<div class="row" style="grid-template-columns:1fr"><span><span class="t">${esc(a.title)}</span><br><span class="s">${esc(a.note ?? '')}</span></span></div>`).join('') || '<p class="hint" style="padding:12px 18px">No steps.</p>'}</div></section>
+    ${v.errors.length ? `<div class="err" role="alert">${v.errors.map((e) => `<p>${esc(e)}</p>`).join('')}</div>` : ''}${v.warnings.length ? `<section class="card"><h2>Worth knowing</h2><ul class="plain">${v.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></section>` : ''}
+    ${b.unknowns.length ? `<section class="card"><h2>Open questions</h2><ul class="plain">${b.unknowns.map((u) => `<li>${esc(u)}</li>`).join('')}</ul></section>` : ''}
+    <p class="s mono-s">Approval code ${esc(b.hash)}. The plan is re-checked against it when you apply.</p>
+    <p><button class="btn primary" type="button" data-setup="apply" ${v.ok && !SETUP.busy ? '' : 'disabled'}>Approve and set up</button> <button class="btn" type="button" data-setup="back">Back</button></p>`;
+}
+
 // ---- shell ----
 const ROUTES = { home: ['Home', home, 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'], services: ['Services', services, 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6'],
   team: ['Team', team, 'M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0'],
   cost: ['Cost', cost, 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.3 5 3.3-2.2 3-5 3-5-1.1-5-3'], safety: ['Safety', safetyScreen, 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],
   models: ['Models', models, 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5'],
+  setup: ['Set up', setupScreen, 'M12 5v14M5 12h14'],
   activity: ['Activity', activity, 'M3 12h4l3-8 4 16 3-8h4'] };
 const icon = (p) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${p}"/></svg>`;
 const route = () => { const h = (location.hash.replace(/^#\/?/, '') || 'home').split('/')[0]; return ROUTES[h] ? h : 'home'; };
@@ -308,13 +390,13 @@ const route = () => { const h = (location.hash.replace(/^#\/?/, '') || 'home').s
 function paint() {
   const r = route(), badge = S?.needs.length ?? 0;
   $('nav').innerHTML = Object.entries(ROUTES).map(([k, v]) => `<a href="#/${k}" ${k === r ? 'aria-current="page"' : ''}>${icon(v[2])}<span>${v[0]}</span>${k === 'home' && badge ? `<b class="badge" aria-label="${badge} need you">${badge}</b>` : ''}</a>`).join('');
-  const MORE = ['activity', 'models', 'safety'], main4 = Object.entries(ROUTES).filter(([k]) => !MORE.includes(k));
+  const MORE = ['activity', 'models', 'safety', 'setup'], main4 = Object.entries(ROUTES).filter(([k]) => !MORE.includes(k));
   $('tabs').style.gridTemplateColumns = 'repeat(' + (main4.length + 1) + ',1fr)';
   $('tabs').innerHTML = main4.map(([k, v]) => '<a href="#/' + k + '" ' + (k === r ? 'aria-current="page"' : '') + '>' + icon(v[2]) + v[0] + '</a>').join('') + '<button type="button" data-more ' + (MORE.includes(r) ? 'aria-current="page"' : '') + '>' + icon('M4 7h16M4 12h16M4 17h16') + 'More</button>';
   const main = $('main');
   if (failure) main.innerHTML = `<h1>Cannot read the stack</h1><div class="err" role="alert"><p><b>${esc(failure.title)}</b></p><p class="hint">${esc(failure.hint)}</p></div>`;
   else if (!S) main.innerHTML = '<p style="color:var(--ink-3)">Loading…</p>';
-  else main.innerHTML = ROUTES[r][1]();
+  else if (!(r === 'setup' && document.activeElement?.id === 'sdesc')) main.innerHTML = ROUTES[r][1](); // never repaint under someone who is typing
   document.title = `${S && !failure ? `${S.headline.needCount ? `(${S.headline.needCount}) ` : ''}` : ''}${ROUTES[r][0]} · Agent Stack`;
   if (S && location.hash === '#/home-needs') $('needs')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -331,6 +413,8 @@ async function load() {
 
 function applyTheme() { document.documentElement.dataset.theme = THEME || ''; const dark = THEME === 'dark' || (!THEME && matchMedia('(prefers-color-scheme:dark)').matches); $('theme').textContent = dark ? 'Light mode' : 'Dark mode'; }
 $('theme').onclick = () => { const dark = document.documentElement.dataset.theme === 'dark' || (!THEME && matchMedia('(prefers-color-scheme:dark)').matches); THEME = dark ? 'light' : 'dark'; try { localStorage.setItem('theme', THEME); } catch { /* ignore */ } applyTheme(); };
+document.addEventListener('input', (e) => { if (e.target.id === 'sdesc') SETUP.text = e.target.value; });
+document.addEventListener('change', (e) => { const sf = e.target.dataset?.sf; if (sf && SETUP.req) setupEdit(sf, e.target.type === 'checkbox' ? e.target.checked : e.target.value); });
 document.addEventListener('change', (e) => { const f = e.target.dataset?.filter; if (f) { FILTER[f] = e.target.value; paint(); } });
 addEventListener('hashchange', () => { setPanel(false); paint(); scrollTo(0, 0); });
 $('scrim').onclick = () => setPanel(false);
@@ -338,7 +422,9 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setPanel(f
 $('logo').innerHTML = crab('Manager', 'working');
 $('railclock').textContent = 'v0.1';
 document.addEventListener('click', (e) => {
-  if (e.target.closest('[data-more]')) { const d = $('dlg'); d.innerHTML = '<h3>More</h3><p style="display:flex;flex-direction:column;gap:8px"><a class="btn" href="#/activity">Activity</a><a class="btn" href="#/models">Models</a><a class="btn" href="#/safety">Safety</a></p><div class="acts"><button class="btn" type="button" data-x>Close</button></div>'; d.querySelectorAll('a,[data-x]').forEach((b) => { b.onclick = () => d.close(); }); d.showModal(); return; }
+  if (e.target.closest('[data-more]')) { const d = $('dlg'); d.innerHTML = '<h3>More</h3><p style="display:flex;flex-direction:column;gap:8px"><a class="btn" href="#/activity">Activity</a><a class="btn" href="#/models">Models</a><a class="btn" href="#/safety">Safety</a><a class="btn" href="#/setup">Set up</a></p><div class="acts"><button class="btn" type="button" data-x>Close</button></div>'; d.querySelectorAll('a,[data-x]').forEach((b) => { b.onclick = () => d.close(); }); d.showModal(); return; }
+  const ps = e.target.closest('[data-preset]'); if (ps) return setupPreset(ps.dataset.preset);
+  const su = e.target.closest('[data-setup]'); if (su && !su.disabled) { const a = su.dataset.setup; if (a === 'read') return setupInterpret(); if (a === 'apply') return setupApply(); if (a === 'back') { SETUP.step = 'describe'; return paint(); } if (a === 'again') { Object.assign(SETUP, { step: 'describe', req: null, bp: null, job: null, errors: [], note: '' }); return paint(); } }
   const ag = e.target.closest('[data-agent]'); if (ag) return openAgent(ag.dataset.agent);
   if (e.target.closest('[data-close-panel]')) return setPanel(false);
   const cp = e.target.closest('[data-copy]'); if (cp) { navigator.clipboard?.writeText($('cmd').textContent).then(() => toast('Command copied.'), () => toast('Select the command and copy it.', true)); return; }
