@@ -1,0 +1,4 @@
+{
+  "_comment": "Pinned versions the reconciler is tested against (see docs/architecture/13-m1-api-findings.md). stack doctor warns on a mismatch.",
+  "paperclip": "2026.1005.0"
+}
