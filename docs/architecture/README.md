@@ -19,6 +19,10 @@ Status: **proposal for review. Nothing here is implemented, committed, pushed or
 | 13 | [M1 API findings](13-m1-api-findings.md) |
 | 14 | [M2 plan: the Control App](14-m2-plan.md) |
 | 15 | [M2 design direction](15-m2-design.md) |
+| 16 | [M3 onboarding](16-m3-onboarding.md) |
+| 17 | [M4 tools and integrations](17-m4-tools.md) |
+| 18 | [M5 decision service](18-m5-decisions.md) |
+| 19 | [M6 decisions: second framework and desktop wrapper](19-m6-decisions.md) |
 
 ## Executive summary
 
