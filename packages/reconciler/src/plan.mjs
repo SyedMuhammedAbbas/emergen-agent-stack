@@ -46,6 +46,8 @@ export function planAgent(d, live, { resolve = 'ask', fields: FL = FIELDS } = {}
       else op = 'conflict';
     }
     let decided = false;
+    // an explicit --take-template also replaces an edit that was being kept (use it with --only on purpose)
+    if (op === 'keep-live' && resolve === 'take-template') { op = 'update'; decided = true; }
     if (op === 'adopt-diff' || op === 'conflict') {
       if (resolve === 'take-template') { op = 'update'; decided = true; }
       else if (resolve === 'keep-live') { op = 'keep-live'; decided = true; }

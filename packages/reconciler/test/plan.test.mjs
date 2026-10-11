@@ -68,6 +68,13 @@ test('a person edited it, template unchanged -> keep-live, nothing to write', ()
   assert.deepEqual(ops(p), { title: 'keep-live' });
 });
 
+test('--take-template replaces a kept edit; the default and --keep-live do not', () => {
+  const d = base(), l0 = liveOf(d), applied = appliedFor(d, l0), l = { ...l0, title: 'Mine', stack: applied };
+  assert.deepEqual(ops(planAgent(d, l)), { title: 'keep-live' });
+  assert.deepEqual(ops(planAgent(d, l, { resolve: 'keep-live' })), { title: 'keep-live' });
+  assert.deepEqual(ops(planAgent(d, l, { resolve: 'take-template' })), { title: 'update' });
+});
+
 test('both changed -> conflict, never silently overwritten', () => {
   const d0 = base(), l0 = liveOf(d0), applied = appliedFor(d0, l0);
   const d = { ...d0, title: 'Template title' }, l = { ...l0, title: 'My title', stack: applied };
