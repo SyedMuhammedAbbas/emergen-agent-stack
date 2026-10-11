@@ -66,7 +66,7 @@ Where each top use case lands:
 ## 6.4 MVP recommendation
 
 1. **Build use case 08 first** (the eval harness) together with the Decision-service skeleton.
-2. **First live decision: 17 on the Downloads organiser.** Reason: free labelled data exists today. The move logs from the cleanup (`downloads-moved.csv`, `qualifi-moved.csv`, `repos-moved.csv`, `dupes-moved.csv` in `C:Abbas_data-audit`) record where hundreds of real files ended up, so accuracy can be measured on day one, mistakes are reversible (undo log), and no agent or external system is involved. First measurement: what share of files the current rules leave unsorted (if it is tiny, Jev adds little and we move on).
+2. **First live decision: 17 on the Downloads organiser.** Reason: free labelled data exists today. The move logs from the cleanup (`downloads-moved.csv`, `qualifi-moved.csv`, `repos-moved.csv`, `dupes-moved.csv` in `C:\Abbas\_data-audit\`) record where hundreds of real files ended up, so accuracy can be measured on day one, mistakes are reversible (undo log), and no agent or external system is involved. First measurement: what share of files the current rules leave unsorted (if it is tiny, Jev adds little and we move on).
 3. **Second: 09 (skill picker)** and **11 (Upwork/ticket pre-filter)**, once the harness has proven the loop; both need labelled examples collected from real use first.
 4. Run **19** once, cheaply, on past sessions to find decisions we have not thought of.
 5. Everything else in the table is parked.
