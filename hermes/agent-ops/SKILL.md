@@ -1,24 +1,23 @@
 ---
 name: agent-ops
-description: "Any Odoo change (timesheets, tasks, stages, notes) and replies to the AI-agent digest: propose first, write only after the user approves in Discord."
-version: 0.2.0
+description: "Any Odoo change (timesheets, tasks, stages, notes) and replies to the approval digest: propose first, write only after the user approves in Discord."
+version: 0.3.0
 author: agent-stack
 platforms: [windows]
 metadata:
   hermes:
-    tags: [Odoo, Paperclip, Timesheets, Approvals, Agents]
+    tags: [Odoo, Timesheets, Approvals]
 ---
 
 # Agent ops bridge
 
 **Hard rule: nothing is written to Odoo until the user approves it in Discord.** Your Odoo MCP tools are read-only (write tools are disabled). Every Odoo change goes through `agent_ops.py`: first `propose`, then the user replies `approve N`, then you run `approve N`.
 
-The AI engineering agents (Manager, CTO, Frontend/Backend/DevOps/SecOps Engineers, QA, UX Reviewer, Docs, Estimator) run in Paperclip (http://localhost:3100). Scheduled jobs:
+Proposals also come from the user's own Claude Code sessions, which run `agent_ops.py propose`. Scheduled jobs:
 
-- **agent-intake** (every 15 min): Odoo tasks tagged `agent-ready` become Paperclip issues `[ODOO-<id>] <name>` for the Manager. Read-only on Odoo. It also relays agent "Question for board" comments (❓) and new proposals (📝).
-- **agent-digest** (daily): numbered list of agent work and open proposals awaiting approval.
+- **agent-proposals** (every 5 min): posts newly queued proposals (📝).
+- **agent-digest** (daily): numbered list of open proposals awaiting approval.
 - **agent-standup** (mornings): the user's DSM text to copy. If asked to redo it, run `standup` and post the output.
-- The **Timekeeper** agent in Paperclip proposes the user's own timesheets at day end; it appears as a 📝 proposal.
 
 Script:
 
@@ -55,16 +54,14 @@ Examples: "log 3h on NeuraX task 28034 for yesterday", "fix the 16th sep hours t
 | `edit 2 hours=1.5` / `edit 2 stage=Testing` (digest items only) | `edit 2 hours=1.5 stage=Testing` (stage names with spaces: use `_`, e.g. `stage=Code_Review`) |
 | `reject 4 <reason>` | `reject 4 <reason>` |
 | "what's pending?" | `pending` |
-| `answer EME-12 clients, folder acme-portal` (reply to a ❓ question) | `answer EME-12 clients, folder acme-portal` |
-| `new project: <name>` followed by requirements (text and/or files) | Save the full requirements text (message plus extracted text of attached .txt/.md/.pdf/.docx) to `{{HERMES_HOME}}\state\agent_ops\requirements-<name>.md`, then run `newproject <name> --file <that path>` |
 
-For `new project`, keep the client's wording verbatim. If an attachment can't be read, say which one and still create the project with what you have.
+`answer ...` and `new project: ...` are no longer handled here: tell the user to raise them in a Claude Code session.
 
 ## How you write in Discord
 
 The owner reads you on a phone. When you write anything yourself (not the script's output, which you post verbatim):
 - Start with the answer or the result in one line; add at most three short lines of detail.
-- Tickets as `Ticket#291 (short title)`, never Odoo database ids. Agent tasks as `EME-12` with a plain title.
+- Tickets as `Ticket#291 (short title)`, never Odoo database ids.
 - No file paths, ids, hashes, JSON, error codes or stack traces. If something failed, say what it means and what the owner can do ("Odoo did not answer; try again in a few minutes").
 - When you need an answer, ask one question and show the exact reply to type.
 - Follow the full standard in the agent-stack repo, `docs/discord-messages.md`.

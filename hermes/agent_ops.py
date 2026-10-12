@@ -1,7 +1,10 @@
-"""Agent ops: Odoo <-> Paperclip bridge for Hermes.
+"""Agent ops: Odoo approvals bridge for Hermes (proposals queued by the owner's Claude Code sessions).
+
+init, propose, proposals, digest, approve, edit, reject, pending, standup and odoo need only Odoo.
+intake, questions, diskguard, answer and newproject still need Paperclip and are retired (their cron jobs are paused).
 
 Subcommands
-  init                        Check Odoo/Paperclip access (read-only); queues a proposal if the intake tag is missing
+  init                        Check Odoo access (read-only); queues a proposal if the intake tag is missing
   propose --file p.json       Queue any other Odoo change (tasks, timesheets, stages, notes) for approval in Discord
   proposals / questions       Relay new proposals / agent questions (cron; empty output when nothing new)
   diskguard                   Pause all agents when C: runs low, resume + restart their tasks when space is back (cron)
@@ -9,10 +12,10 @@ Subcommands
   odoo projects|project <id>|tasks <project_id> [--mine] [--open]|timesheets <from> [<to>]
                               Read-only Odoo lookups as JSON, for agents preparing proposals
   intake                   Odoo tasks tagged agent-ready -> Paperclip issues (assigned to Manager)
-  digest                      Build the daily approval digest from agents' "Run summary" comments
+  digest                      Daily list of proposals still awaiting approval
   approve 1,3                 Write timesheets / stage / chatter to Odoo for digest items
   edit 2 hours=1.5 [stage=X]  Adjust an item, then approve it
-  reject 4 [reason...]        Send an item back to the Manager in Paperclip
+  reject 4 [reason...]        Drop an item; nothing is written to Odoo
   pending                     Show items still awaiting a decision
   answer EME-12 <text>        Reply to an agent's "Question for board"
   newproject <name> --file f  New client requirements -> Estimator (or pipe text on stdin)
@@ -59,17 +62,7 @@ DEFAULT_CONFIG = {
     "standup_recent_days": 7,
     "workdays": "0,1,2,3,4,5",  # Mon=0 ... Sun=6
 }
-REQUIRED = ("company_id", "manager_agent_id", "estimator_agent_id", "timesheet_employee")
-
-SUMMARY_FIELDS = {
-    "odoo id": "odoo_id",
-    "agent": "agent",
-    "what changed": "changed",
-    "pr": "pr",
-    "qa verdict": "qa",
-    "hours estimate": "hours",
-    "proposed odoo stage": "stage",
-}
+REQUIRED = ("timesheet_employee",)  # the Paperclip ids are only read by the retired Paperclip commands
 
 
 # ---------- config / env ----------
@@ -351,22 +344,6 @@ def cmd_newproject(cfg, args, dry_run):
 
 # ---------- digest ----------
 
-def parse_summary(body: str) -> dict | None:
-    if "run summary" not in (body or "").lower():
-        return None
-    out = {}
-    for line in body.splitlines():
-        m = re.match(r"\s*[-*]\s*([^:]+):\s*(.+)$", line)
-        if m and m.group(1).strip().lower() in SUMMARY_FIELDS:
-            out[SUMMARY_FIELDS[m.group(1).strip().lower()]] = m.group(2).strip()
-    return out or None
-
-
-def parse_hours(s) -> float:
-    m = re.search(r"\d+(?:\.\d+)?", s or "")
-    return float(m.group()) if m else 0.0
-
-
 def short_title(title: str) -> str:
     """'[ODOO-1] QA: 179: 153: Backend: X (long detail)' -> 'Backend: X'"""
     t = re.sub(r"^\[ODOO-\d+\]\s*(QA:\s*)?(\d+:\s*)*", "", title)
@@ -388,50 +365,9 @@ def item_update(it: dict) -> str:
 
 
 def cmd_digest(cfg):
-    pc = Paperclip(cfg)
     now = dt.datetime.now(dt.timezone.utc)
-    since_s = read_state("last_digest", {}).get("at")
-    since = dt.datetime.fromisoformat(since_s) if since_s else now - dt.timedelta(days=1)
-    pending = {p["issue_id"]: p for p in read_state("pending", [])}
-    # Agents' own work hours per task are not the owner's timesheet (the Timekeeper's proposals are), and the
-    # owner rejected every one; the digest lists only real proposals unless DIGEST_WORK_ITEMS=true.
-    work_items = os.environ.get("DIGEST_WORK_ITEMS", "false").lower() == "true"
-    if not work_items:
-        pending = {k: p for k, p in pending.items() if p.get("kind") == "proposal"}
-
-    for issue in (pc.issues() if work_items else []):
-        m = re.match(r"\[ODOO-(\d+)\]", issue.get("title", ""))
-        if not m:
-            continue
-        summaries, latest = [], None
-        for c in sorted(pc.comments(issue["id"]), key=lambda c: c["createdAt"]):
-            created = dt.datetime.fromisoformat(c["createdAt"].replace("Z", "+00:00"))
-            if created > since and (s := parse_summary(c.get("body", ""))):
-                summaries.append(s)
-                latest = created
-        if not summaries:
-            continue
-        item = pending.get(issue["id"], {
-            "issue_id": issue["id"], "identifier": issue.get("identifier"),
-            "odoo_task_id": int(m.group(1)), "title": issue["title"],
-            "hours": 0.0, "changed": [], "pr": None, "qa": None, "stage": None,
-        })
-        # timesheet date = local day of the latest summary, not the day you approve
-        item["date"] = latest.astimezone().date().isoformat()
-        for s in summaries:
-            item["hours"] = round(item["hours"] + parse_hours(s.get("hours")), 2)
-            if s.get("changed"):
-                item["changed"].append(f"{s.get('agent', '?')}: {s['changed']}")
-            if s.get("pr", "").lower() not in ("", "none", "n/a"):
-                item["pr"] = s["pr"]
-            if s.get("qa", "").upper() in ("PASS", "FAIL"):
-                item["qa"] = s["qa"].upper()
-            if s.get("stage", "").lower() not in ("", "unchanged", "n/a"):
-                item["stage"] = s["stage"]
-        item["status"] = issue.get("status")
-        pending[issue["id"]] = item
-
-    items = list(pending.values())
+    # Only proposals: the agents' Paperclip work items are gone, and any left in the state are dropped here.
+    items = [p for p in read_state("pending", []) if p.get("kind") == "proposal"]
     # Numbers are permanent: an item keeps the number the owner already saw, and a
     # new item continues from the highest number ever issued, so an old "approve N"
     # can never land on a different item.
@@ -440,29 +376,19 @@ def cmd_digest(cfg):
         if not it.get("n"):
             last += 1
             it["n"] = last
-        if it.get("kind") == "proposal":
-            it["posted"] = True
+        it["posted"] = True
     items.sort(key=lambda it: it["n"])
     write_state("pending", items)
     write_state("last_n", last)
     write_state("last_digest", {"at": now.isoformat()})
 
     if not items:
-        print("📋 **Daily digest:** nothing from the agents to approve today.")
+        print("📋 **Daily digest:** nothing to approve today.")
         return
     date = now.astimezone().strftime("%a %d %b")  # local time
     out = [f"📋 **Daily digest, {date}**: {len(items)} item{'s' if len(items) != 1 else ''} to approve"]
-    digest_labels = ticket_labels([it.get("odoo_task_id") for it in items if it.get("kind") != "proposal"])
-    for it in items:
-        if it.get("kind") == "proposal":  # renumbered above, so always re-show it
-            out.append("\n" + format_proposal(it))
-            continue
-        label = digest_labels.get(str(it["odoo_task_id"])) or short_title(it["title"])
-        stage = (f", move to {it['stage']}" if it.get("stage")
-                 and not re.search(r"testing|done", str(it["stage"]), re.I) else "")
-        out.append(f"**{it['n']}.** {label}: {item_update(it)} ({it['hours']} h{stage})")
-    out.append("\nReply `approve 1,2`, `edit 2 hours=1.5` or `reject 3 <reason>`. "
-               "Nothing changes in Odoo until you approve.")
+    out += ["\n" + format_proposal(it) for it in items]
+    out.append("\nReply `approve 1,2` or `reject 3 <reason>`. Nothing changes in Odoo until you approve.")
     print("\n".join(out))
 
 
@@ -977,26 +903,23 @@ def cmd_edit(cfg, args, dry_run):
 
 
 def cmd_reject(cfg, args, dry_run):
-    pc, items = Paperclip(cfg), select(args[0])
+    items = select(args[0])
     reason = " ".join(args[1:]) or "Rejected in the daily digest."
     for it in items:
         if it.get("kind") == "proposal":
             print(f"{'(dry run) ' if dry_run else ''}❌ Approval {it['n']} dropped: {it['title']}. Nothing was changed in Odoo.")
             continue
-        if not dry_run:
-            pc.comment(it["issue_id"], f"**Board rejected this in the daily digest:** {reason}")
-            pc.update_issue(it["issue_id"], {"status": "todo", "assigneeAgentId": cfg["manager_agent_id"]})
-        print(f"{'(dry run) ' if dry_run else ''}❌ {it['n']}. Sent {it['identifier']} back to the Manager: {reason}")
+        print(f"{'(dry run) ' if dry_run else ''}❌ {it['n']}. {short_title(it['title'])} dropped: {reason}. "
+              "Nothing was changed in Odoo.")
     if not dry_run:
         drop_pending({it["issue_id"] for it in items})
 
 
 def cmd_init(cfg):
-    """Check Odoo + Paperclip access (read-only). A missing tag is queued as a proposal, never created here."""
-    odoo, pc = Odoo(), Paperclip(cfg)
+    """Check Odoo access (read-only). A missing tag is queued as a proposal, never created here."""
+    odoo = Odoo()
     emp = find_employee(odoo, cfg["timesheet_employee"])
-    pc.issues()
-    print(f"ok: Odoo uid {odoo.uid}, employee '{cfg['timesheet_employee']}' id {emp}, Paperclip reachable")
+    print(f"ok: Odoo uid {odoo.uid}, employee '{cfg['timesheet_employee']}' id {emp}")
     if not odoo.tag_id(cfg["ready_tag"]):
         queued = any(p.get("kind") == "proposal" and p["title"] == "Setup: intake tag" for p in read_state("pending", []))
         if not queued:
