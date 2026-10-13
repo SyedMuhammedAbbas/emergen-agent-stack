@@ -1,6 +1,8 @@
-# Installs the Odoo <-> Paperclip <-> Discord bridge into an existing Hermes install. Idempotent.
+# Installs the Odoo <-> Discord bridge (proposals and approvals, digest, standup) into an existing Hermes install. Idempotent.
 # Needs: Hermes installed on Windows with its Discord gateway and Odoo credentials (ODOO_URL, ODOO_DB,
-# ODOO_USERNAME, ODOO_API_KEY) in <HERMES_HOME>\.env, and the Paperclip org created (wsl/40-org.sh).
+# ODOO_USERNAME, ODOO_API_KEY) in <HERMES_HOME>\.env.
+# The cron jobs agent-intake, agent-questions and agent-diskguard served the retired agent orchestrator and were paused on
+# purpose; this script neither creates nor resumes them.
 . "$PSScriptRoot\lib.ps1"
 $cfg = Read-Config
 foreach ($k in 'DISCORD_CHANNEL_ID', 'TIMESHEET_EMPLOYEE') { if (-not $cfg[$k]) { throw "config.env: $k is empty" } }
@@ -16,7 +18,7 @@ foreach ($k in 'ODOO_URL', 'ODOO_DB', 'ODOO_USERNAME', 'ODOO_API_KEY') {
 $scripts = Join-Path $hh 'scripts'; New-Item -ItemType Directory -Force $scripts | Out-Null
 Copy-Item "$RepoDir\hermes\agent_ops.py" $scripts -Force
 # one cron entry point per command (Hermes cron scripts take no arguments; the file name picks the command)
-$jobCommands = 'intake', 'questions', 'proposals', 'digest', 'standup', 'diskguard'
+$jobCommands = 'proposals', 'digest', 'standup'
 foreach ($c in $jobCommands) { Copy-Item "$RepoDir\hermes\agent_job.py" (Join-Path $scripts "agent_$c.py") -Force }
 $skillDir = Join-Path $hh 'skills\productivity\agent-ops'; New-Item -ItemType Directory -Force $skillDir | Out-Null
 # pre-1.0 installs used this name; two copies would give Hermes two competing skills
@@ -27,18 +29,11 @@ $skill = [IO.File]::ReadAllText("$RepoDir\hermes\agent-ops\SKILL.md", $utf8)
 [IO.File]::WriteAllText((Join-Path $skillDir 'SKILL.md'), $skill.Replace('{{HERMES_HOME}}', $hh).Replace('{{TIMESHEET_EMPLOYEE}}', $cfg.TIMESHEET_EMPLOYEE), $utf8)
 Write-Step "bridge scripts and skill installed in $hh"
 
-# ---- config from the Paperclip ids ----
-$idsJson = (& wsl.exe -d $cfg.WSL_DISTRO -u $cfg.WSL_USER -- cat "/home/$($cfg.WSL_USER)/.agent-stack/ids.json") -join "`n"
-$ids = $idsJson -replace "`0", '' | ConvertFrom-Json
-if (-not $ids.company -or -not $ids.manager -or -not $ids.estimator) { throw "Paperclip ids missing; run wsl/40-org.sh first." }
+# ---- config ----
 $cfgFile = Join-Path $scripts 'agent_ops.config.json'
 $projectMap = @{}
 if (Test-Path $cfgFile) { $old = [IO.File]::ReadAllText($cfgFile) | ConvertFrom-Json; if ($old.project_map) { $projectMap = $old.project_map } }
 $json = [ordered]@{
-    paperclip_api      = 'http://localhost:3100/api'
-    company_id         = $ids.company
-    manager_agent_id   = $ids.manager
-    estimator_agent_id = $ids.estimator
     ready_tag          = $cfg.ODOO_READY_TAG
     timesheet_employee = $cfg.TIMESHEET_EMPLOYEE
     project_map        = $projectMap
@@ -67,12 +62,9 @@ if ((hermes config get mcp_servers.odoo 2>&1) -match 'odoo-mcp') {
 # ---- cron jobs: created, or updated in place to match config.env ----
 function Channel($key) { $v = $cfg[$key]; if ($v) { $v } else { $cfg.DISCORD_CHANNEL_ID } }  # fall back to the main channel
 $jobs = @(
-    @{ name = 'agent-intake';    schedule = $cfg.INTAKE_SCHEDULE; channel = Channel 'DISCORD_ACTIVITY_CHANNEL_ID' }
-    @{ name = 'agent-questions'; schedule = $cfg.INTAKE_SCHEDULE; channel = Channel 'DISCORD_QUESTIONS_CHANNEL_ID' }
     @{ name = 'agent-proposals'; schedule = 'every 5m';           channel = Channel 'DISCORD_APPROVALS_CHANNEL_ID' }
     @{ name = 'agent-digest';    schedule = $cfg.DIGEST_SCHEDULE; channel = Channel 'DISCORD_APPROVALS_CHANNEL_ID' }
     @{ name = 'agent-standup';   schedule = $cfg.STANDUP_SCHEDULE; channel = Channel 'DISCORD_STANDUP_CHANNEL_ID' }
-    @{ name = 'agent-diskguard'; schedule = 'every 5m';           channel = Channel 'DISCORD_QUESTIONS_CHANNEL_ID' }
 )
 # "  <12-hex id> [state]" followed by "    Name:      <name>"
 $listing = (hermes cron list 2>&1) -join "`n"

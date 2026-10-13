@@ -1,6 +1,6 @@
 ---
 name: radbase-context
-description: Project context for RadBase (repo reports-scoped, Paperclip project radbase). Load for ANY RadBase work - spec scope, de-identification (PHI), AI classification/extraction, DICOM ingestion, web UI, local stack, testing.
+description: Project context for RadBase (repo reports-scoped). Load for ANY RadBase work - spec scope, de-identification (PHI), AI classification/extraction, DICOM ingestion, web UI, local stack, testing.
 ---
 
 # RadBase project context

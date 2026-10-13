@@ -55,7 +55,7 @@ AO='{{AGENT_OPS}}'
    ```
    Timesheet descriptions follow the user's style: `Area - what was done`, plain words, no em dashes.
    Then run `propose --file '<windows path>'`.
-9. **Report** on the issue: the proposal text (it starts with its number), and anything you skipped or were unsure about. If a mapping is genuinely ambiguous, post a `**Question for board:**` instead of guessing and leave that stream out of the proposal.
+9. **Report** to the owner: the proposal text (it starts with its number), and anything you skipped or were unsure about. If a mapping is genuinely ambiguous, ask the owner instead of guessing and leave that stream out of the proposal.
 
 ## Rules
 - Never call Odoo write methods and never run `approve`. Only `odoo ...` reads and `propose`.

@@ -12,7 +12,7 @@ Everything you write must read like it came from a careful senior engineer, not 
 - **Verify before you claim.** Never state that a file, function, API, flag, package version, endpoint or config key exists unless you opened it, ran it, or read it in official docs during this run.
 - **No invented APIs.** Before using a library method, check the installed version (`package.json`, lockfile, `node_modules/<pkg>/package.json`, `pubspec.lock`) and its docs or type definitions.
 - **No invented results.** Never write "tests pass", "works", "fixed" or "verified" unless you ran the command in this run and saw the output. Quote the command and the relevant result line.
-- **Say what you don't know.** If something is unverified, say "unverified" and why. Ask the Manager instead of guessing requirements.
+- **Say what you don't know.** If something is unverified, say "unverified" and why. Ask the owner instead of guessing requirements.
 - **Cite sources** in docs and summaries: file paths with line numbers, command output, or doc URLs.
 
 ## 2. Banned in all writing
@@ -29,7 +29,7 @@ Everything you write must read like it came from a careful senior engineer, not 
 - Match the surrounding code: naming, comment density, file layout, error-handling idiom.
 - Comments explain **why**, never narrate **what** (`// increment i` is banned).
 - No dead code, commented-out blocks, placeholder `TODO`s, `console.log`/`print` debugging, or unused imports in a PR.
-- No mock data, fake URLs, lorem ipsum or stub implementations left in delivered code. If something must be stubbed, it is listed as incomplete in the Run summary.
+- No mock data, fake URLs, lorem ipsum or stub implementations left in delivered code. If something must be stubbed, it is listed as incomplete in your final report.
 - No speculative abstractions, config flags or helpers "for the future".
 
 ## 4. Commits and PRs
@@ -46,4 +46,4 @@ git diff | grep -nP '\x{2014}|\x{2013}' && echo "REMOVE DASHES"
 git diff | grep -niE 'robust|seamless|leverage|delve|cutting-edge|game-changer|supercharge|lorem ipsum|TODO|console\.log'
 ```
 
-Fix every hit before posting the Run summary.
+Fix every hit before you report.

@@ -1,6 +1,6 @@
 ---
 name: khudmukhtaar-context
-description: Project context for Khudmukhtaar (online courses platform for women in Pakistan; Paperclip project Khudmukhtaar). Load for ANY Khudmukhtaar work - website, course pages, enrollment and Google Sheets, backend API, admin, milestones, deploys, client approvals.
+description: Project context for Khudmukhtaar (online courses platform for women in Pakistan). Load for ANY Khudmukhtaar work - website, course pages, enrollment and Google Sheets, backend API, admin, milestones, deploys, client approvals.
 ---
 
 # Khudmukhtaar project context
@@ -25,7 +25,7 @@ The full, maintained guide is **`/mnt/d/Projects/Emergen/khudmukhtaar/AGENTS.md`
 - Milestone 1 done (22-30 Sep, 56 h): website UI, course detail pages, Google Sheet integration. Live on
   staging https://khudmukhtarstaging.vercel.app ; production deploy pending.
 - Milestone 2 due 30 Oct 2026 (233 h): programs and batches, accounts and access, course content, release
-  schedule, student portal, minimum admin, website live batch data, QA and release. One Paperclip issue each.
+  schedule, student portal, minimum admin, website live batch data, QA and release.
 
 ## Rules
 - Work in your own worktree off `staging`; never edit the repos in place; never commit `.env*` or secrets.

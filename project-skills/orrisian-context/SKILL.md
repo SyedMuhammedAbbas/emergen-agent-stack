@@ -15,5 +15,5 @@ description: What Orrisian is, who it is for and how it sounds. Use for any cont
 - Proof points the board allows you to use (clients, results, testimonials)
 
 ## Rules
-- Use only the facts above. If something is missing, ask with a `**Question for board:**` instead of inventing it.
+- Use only the facts above. If something is missing, ask the owner instead of inventing it.
 - Nothing is published by an agent. The owner approves and posts.

@@ -12,7 +12,7 @@ Nothing incomplete, broken or unfriendly reaches a client. There are two gates.
 The implementing engineer self-checks, then QA independently re-checks. A task passes only when **every** line is true and evidenced (command output, screenshot, or file:line).
 
 **Completeness**
-- [ ] Every acceptance criterion in the issue is met. List each one with its evidence.
+- [ ] Every acceptance criterion in the ticket or request is met. List each one with its evidence.
 - [ ] No stubs, mock data, placeholder text, TODOs, disabled tests or commented-out code.
 - [ ] Empty, loading, error and edge states are handled (no data, slow network, invalid input, permissions denied).
 
@@ -31,24 +31,24 @@ The implementing engineer self-checks, then QA independently re-checks. A task p
 - [ ] No secrets in code or logs; input validated server-side; authz checked on every new endpoint.
 - [ ] Migrations are reversible and tested against a copy of real-shaped data.
 
-Verdict comment format (QA and UX Reviewer):
+Verdict format (QA and UX review; the first line is machine-checkable):
 
 ```
-QA verdict: PASS | FAIL
+VERDICT: PASS | CHANGES
 - Criteria: <n>/<n> met (list any unmet)
 - Evidence: <commands run, screenshots>
 - Blocking issues: <numbered list with repro steps, or "none">
 ```
 
-Any unchecked box = FAIL. "Mostly works" is FAIL.
+Any unchecked box = CHANGES. "Mostly works" is CHANGES.
 
 ## Gate 2: Milestone delivery (before anything is sent to a client)
 
-Owned by the Manager, checked by QA + UX Reviewer, released only after **board (human) approval**.
+Prepared by the main session, checked by QA (UX review included), released only after **the owner's approval**.
 
-- [ ] Every issue in the milestone has QA PASS (and UX PASS if user-facing). No open FAIL, blocker or "in progress" items.
+- [ ] Every ticket in the milestone has a QA PASS (UX included if user-facing). No open FAIL, blocker or "in progress" items.
 - [ ] End-to-end smoke test of the milestone's main user journeys on a staging build, with screenshots/recording.
 - [ ] `{{ENGINEERING_SKILL}}` `production-ready.md` and `deploy-checklist` pass for anything being deployed.
 - [ ] Release notes written for the client in plain language: what's new, how to try it, known limitations. Passes `no-slop`.
-- [ ] Docs updated (README, env vars, runbook) by the Docs agent.
-- [ ] Open a Paperclip approval request to the board with the milestone summary and links. Do not send, deploy to production, or mark delivered until the board approves.
+- [ ] Docs updated (README, env vars, runbook).
+- [ ] Ask the owner in the session for approval, with the milestone summary and links. Do not send, deploy to production, or mark delivered until the owner approves (protected actions are also held by the approval hook).

@@ -5,17 +5,17 @@ description: Safety checks before adding any third-party package, CLI, script, G
 
 # Tool vetting
 
-Installing code is running code. Most supply-chain attacks arrive through an install script, a look-alike package name, a hijacked maintainer account or a script piped from the internet. Nothing new is installed without these checks, and **nothing new is installed without the board's yes**: post a `**Question for board:**` with the filled checklist and wait.
+Installing code is running code. Most supply-chain attacks arrive through an install script, a look-alike package name, a hijacked maintainer account or a script piped from the internet. Nothing new is installed without these checks, and **nothing new is installed without the owner's yes**: ask the owner with the filled checklist and wait.
 
 ## Never
-- Pipe a script from the internet into a shell (`curl ... | bash`, `iwr ... | iex`) unless the board approved that exact URL from the vendor's official docs.
+- Pipe a script from the internet into a shell (`curl ... | bash`, `iwr ... | iex`) unless the owner approved that exact URL from the vendor's official docs.
 - Install from git URLs, tarball URLs or personal forks; only the official registry.
 - Install globally for a project's needs; add a pinned dev dependency to the project instead.
 - Run a downloaded binary, an install script or a skill's scripts you have not read.
 - Give a tool credentials, tokens, `.env` files or `_secrets/` access it does not need.
 - Turn off security checks (`--no-verify`, enabling install scripts globally, `--trusted-host`, `curl -k`).
 
-## Checklist (fill it in your question to the board)
+## Checklist (fill it in your question to the owner)
 
 | Check | How | Pass when |
 |---|---|---|
@@ -35,5 +35,5 @@ Installing code is running code. Most supply-chain attacks arrive through an ins
 - Skills from the internet: read every file, including scripts, before installing; never run their scripts while reviewing them. Prefer writing the useful instructions into a skill in this repo over installing a third-party one.
 
 ## Already checked (Oct 2026; re-check the version you install)
-- `@stryker-mutator/core` and `@stryker-mutator/vitest-runner` 10.0.0 (mutation testing): official stryker-mutator org, Apache-2.0, no install scripts, SLSA build provenance. Still needs the board's yes per project.
+- `@stryker-mutator/core` and `@stryker-mutator/vitest-runner` 10.0.0 (mutation testing): official stryker-mutator org, Apache-2.0, no install scripts, SLSA build provenance. Still needs the owner's yes per project.
 - `fast-check` 4.10.2 (property-based testing): official dubzzz/fast-check, MIT, no install scripts, SLSA build provenance.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run as the agent user. Node 24, Claude Code, Paperclip, jev-router, Playwright Chromium. Idempotent.
+# Run as the agent user. Node 24, Claude Code, Playwright Chromium. Idempotent.
 source "$(dirname "$0")/lib.sh"
 load_config
 MAC=0; [ "$(uname)" = Darwin ] && MAC=1
@@ -31,19 +31,6 @@ fi
 
 npm config set fetch-retries 5 >/dev/null
 npm config set fetch-timeout 600000 >/dev/null
-if ! command -v paperclipai >/dev/null; then
-  log "Paperclip CLI"
-  # embedded Postgres and a few native deps need their install scripts
-  EPG=@embedded-postgres/linux-x64
-  # macOS: paperclipai's optional deps include @embedded-postgres/darwin-arm64 (Apple silicon) and darwin-x64 (Intel)
-  if [ $MAC = 1 ]; then case "$(uname -m)" in arm64) EPG=@embedded-postgres/darwin-arm64 ;; *) EPG=@embedded-postgres/darwin-x64 ;; esac; fi
-  npm install -g --allow-scripts=$EPG,ssh2,protobufjs,cpu-features paperclipai@latest >/dev/null
-fi
-if ! command -v jev-router >/dev/null; then
-  log "jev-router (@ediri scope; the unscoped name is a different project)"
-  npm install -g @ediri/jev-router@latest >/dev/null
-fi
-
 PW_CACHE="$HOME/.cache/ms-playwright"
 [ $MAC = 1 ] && PW_CACHE="$HOME/Library/Caches/ms-playwright"   # Playwright's browser cache on macOS
 if [ ! -d "$PW_CACHE" ]; then
@@ -51,4 +38,4 @@ if [ ! -d "$PW_CACHE" ]; then
   npx -y playwright@latest install chromium >/dev/null
 fi
 
-log "tools: node $(node -v), claude $(claude --version 2>/dev/null | cut -d' ' -f1), paperclipai $(paperclipai --version), jev-router $(jev-router version 2>/dev/null | head -1)"
+log "tools: node $(node -v), claude $(claude --version 2>/dev/null | cut -d' ' -f1)"

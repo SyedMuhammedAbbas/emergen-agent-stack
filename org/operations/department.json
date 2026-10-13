@@ -1,29 +1,9 @@
 {
   "key": "operations",
   "name": "Operations",
-  "description": "Keeps the factory running: timesheets and standups, stalled-task watchdog. The Hermes bridge agent (ops-hermes.md) is created by windows/connect-hermes.ps1. The Chief of Staff reports every team's progress to the owner.",
+  "description": "Timesheets and standups (role-timekeeper skill). Hermes owns Odoo tickets and Discord through the bridge (windows/hermes-bridge.ps1).",
   "head": "timekeeper",
   "agents": [
-    {
-      "key": "chief-of-staff",
-      "name": "Chief of Staff",
-      "role": "pm",
-      "title": "Reports every team's progress to the owner",
-      "icon": "star",
-      "model": "claude-sonnet-5",
-      "router": false,
-      "reportsTo": null,
-      "budgetCents": 900,
-      "skills": [
-        "writing-plans"
-      ],
-      "routine": {
-        "title": "Progress report",
-        "cronEnv": "REPORT_SCHEDULE",
-        "description": "Scheduled progress report: follow your instructions and report on every department."
-      },
-      "maxConcurrentRuns": 1
-    },
     {
       "key": "timekeeper",
       "name": "Timekeeper",
@@ -42,26 +22,6 @@
         "title": "Daily timesheets",
         "cronEnv": "TIMESHEET_SCHEDULE",
         "description": "Prepare today's timesheet proposal with the daily-timesheets skill. Date: the day this issue was created (local time)."
-      },
-      "maxConcurrentRuns": 1
-    },
-    {
-      "key": "watchdog",
-      "name": "Watchdog",
-      "role": "general",
-      "title": "Stalled-task investigator",
-      "icon": "eye",
-      "model": "claude-sonnet-5",
-      "router": false,
-      "reportsTo": "manager",
-      "budgetCents": 1500,
-      "skills": [
-        "systematic-debugging"
-      ],
-      "routine": {
-        "title": "Stall sweep",
-        "cronEnv": "WATCHDOG_SWEEP_SCHEDULE",
-        "description": "Scheduled stall sweep: follow the 'Scheduled sweep' section of your instructions. Check every open task and get stuck work moving."
       },
       "maxConcurrentRuns": 1
     }

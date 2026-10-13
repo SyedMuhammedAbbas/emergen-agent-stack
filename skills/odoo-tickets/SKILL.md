@@ -98,7 +98,7 @@ A description that is only a commit list, or is empty, is not acceptable. Commit
 - Every ticket has a **milestone**, and it matches its parent's milestone.
 - Levels: milestone task (`M3 - App Foundation`) > area section (`Infrastructure & DevOps`) > tickets. No deeper. A ticket whose work spans areas goes under the section where the user sees the change.
 - A sub-task that is still open must show on the project board (`display_in_project`); the bridge sets this for every ticket with a parent.
-- Do not invent new sections or milestones; if nothing fits, ask the board (`**Question for board:**`).
+- Do not invent new sections or milestones; if nothing fits, ask the owner.
 
 ## Tickets written by people
 
@@ -111,7 +111,7 @@ Tickets created by anyone other than the owner's bridge account (for example the
 3. Duplicates: the same work filed twice (e.g. one copy in Testing, one in Backlog). Keep the one that is further along or has timesheets; `archive` the other with a note `Duplicate of Ticket#<n>`. Never archive a ticket that has timesheet hours or is in Doing, Code Review or Testing; ask instead.
 4. Every ticket in scope ends the cleanup with a description in the layout above, including section and milestone tasks.
 5. Propose in **batches of at most 20 changes, one group per batch**, titled so the owner knows what they approve, e.g. `NeuraX tickets 1/6: fix 14 titles (prefixes, jargon)`. Order: duplicates, titles, structure, then descriptions section by section. Keep no more than 3 batches waiting for approval at a time; check `pending` in your next run before queuing more.
-6. To rewrite a description you must first read the ticket (`odoo task <id>`), the linked PRs and commits, and the Paperclip issue if one exists. Do not invent behaviour; if you cannot tell what "done" means, ask.
+6. To rewrite a description you must first read the ticket (`odoo task <id>`), and the linked PRs and commits. Do not invent behaviour; if you cannot tell what "done" means, ask.
 7. Never change a ticket's stage in a cleanup (stages follow the work), never delete, never touch timesheets.
 8. Report on your issue: what each batch contains (with its proposal number) and the questions you could not answer.
 

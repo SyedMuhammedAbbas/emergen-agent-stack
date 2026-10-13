@@ -4,13 +4,13 @@ Claude Code mods that belong to this stack. Each folder is one mod; `catalog.jso
 
 | Mod | What it does |
 |---|---|
-| `paperclip-crew` | A pixel crab per Paperclip agent above the prompt; `/crew` lists them. Reads `localhost:3100`, no tokens. |
+| (none yet) | The former crew mod showed the retired agent orchestrator's agents and was removed on 2026-10-13. |
 
 ## Install (once per machine)
 
 ```bash
 claude plugin marketplace add C:\Abbas\Emergen\agent-stack\mods
-claude plugin install paperclip-crew@emergen-mods
+claude plugin install <mod>@emergen-mods
 node mods/register-in-mod-bar.mjs     # puts the mods in Mod Bar's list; run again after a Mod Bar update
 ```
 

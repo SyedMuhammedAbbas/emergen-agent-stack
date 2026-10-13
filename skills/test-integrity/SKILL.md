@@ -11,7 +11,7 @@ Coverage is not evidence. "All tests pass" is not evidence. Evidence is a test t
 
 ## 1. Write tests from the requirement, not from the code
 
-- Before reading the implementation, list the ticket's acceptance criteria and edge cases (Odoo ticket, PRD, Paperclip issue). Each test names the criterion it checks: `rejects a 6th consecutive raise by the same buyer`, not `should work` or `handles bid`.
+- Before reading the implementation, list the ticket's acceptance criteria and edge cases (Odoo ticket, PRD, the request). Each test names the criterion it checks: `rejects a 6th consecutive raise by the same buyer`, not `should work` or `handles bid`.
 - Expected values come from the requirement or are worked out by hand, never by running the code and copying its output.
 - Assert on what a user or caller can observe: HTTP status and body, rows in the database, events emitted, text on screen, money amounts. Not on private helpers or how many times a mock was called, unless the call itself is the requirement (e.g. "Stripe is charged exactly once").
 - Mock only what you do not own and cannot run (Stripe, email, push). Never mock the unit under test or the database layer the ticket is about; use the integration test setup for those.
@@ -36,7 +36,7 @@ npx stryker run --incremental --mutate "src/<changed files>"
 
 - Every **surviving mutant on a line you changed** is either killed by a new or stronger test, or explained in the PR (equivalent mutant, logging only). List them under "Proof the tests can fail".
 - Report the mutation score for the changed files. Do not chase 100% on untouched code.
-- If Stryker is not set up in the repo, do not add it yourself: it is a new tool and goes through the `tool-vetting` skill and the board. Do the manual break-it check from section 2 instead.
+- If Stryker is not set up in the repo, do not add it yourself: it is a new tool and goes through the `tool-vetting` skill and the owner's yes. Do the manual break-it check from section 2 instead.
 
 For Flutter/Dart, use the manual break-it check from section 2 on every behaviour you changed.
 
@@ -62,7 +62,7 @@ When asked whether a suite is useful:
 1. Pick the modules that matter most (money, auth, bidding, permissions, data integrity).
 2. Run mutation testing on them (or the manual break-it check where it is not set up); record the score per module and the surviving mutants.
 3. Classify tests: **protective** (fails when the behaviour breaks), **weak** (passes with the behaviour broken), **noise** (asserts nothing meaningful, duplicates another, tests a mock). Give file:line for each weak or noise test.
-4. Propose: strengthen weak tests, delete noise (list them; deleting tests needs the board's approval), add tests for surviving mutants on critical paths. Never rewrite a whole suite in one PR.
+4. Propose: strengthen weak tests, delete noise (list them; deleting tests needs the owner's approval), add tests for surviving mutants on critical paths. Never rewrite a whole suite in one PR.
 5. Report before and after: mutation score per module, test count, suite run time.
 
 ## Sources

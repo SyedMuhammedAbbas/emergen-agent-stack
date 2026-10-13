@@ -6,12 +6,13 @@ Every standing instruction from the owner, and the file that teaches it to the a
 
 | Rule | Where it is enforced |
 |---|---|
+| The AI factory contract (2026-10-13): chat is the only entry point, the main session coordinates, minimal specialists, Hermes owns tickets, approvals only for protected actions, Opus 5.5 by default | `docs/ai-factory.md`, `org/_global/CLAUDE.md`, `org/_agents/`, `skills/factory` |
 | No invented facts, APIs or results; no em dashes or AI filler | `skills/no-slop`, `org/_partials/common.md` |
 | Never claim done without running the check in this run | `skills/verification-before-completion`, `common.md` |
 | Run long commands in the foreground and wait for the result | `common.md`, `wsl/hooks/wait-for-background.sh` |
 | Test only what proves the step; never repeat a passed gate | `common.md` |
 | Never set a git identity; no AI attribution in client repos | `common.md` |
-| Never prune or delete worktrees, branches or files you did not create; never create a worktree inside a repo folder | `common.md`, `wsl/watchdog/watchdog.sh` (keeps worktrees an open task uses) |
+| Never prune or delete worktrees, branches or files you did not create; never create a worktree inside a repo folder | `common.md` |
 | Never type passwords, sign-in codes, API keys or real card numbers; the owner signs test accounts in (exception: a fixed demo code the owner writes into a task, for named staging test accounts only) | `common.md`, `org/engineering/qa.md` |
 | Stay out of the owner's personal folders and `_secrets/` | `common.md`, project context skills |
 | Nothing new installed without the vetting checklist and the owner's yes | `skills/tool-vetting`, `common.md` |

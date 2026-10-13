@@ -86,6 +86,6 @@ AO='{{AGENT_OPS}}'
 - `task` is the Odoo task **id** (not the Ticket# number); get it with `"$PY" "$AO" odoo tasks <project_id> --open`.
 - Add the `stage` action only for a ticket you **verified** under your Testing rule; the owner approves proof and stage move together. A ticket that is still broken gets evidence of the failure (no stage action) so the developer sees it.
 - The `note` is one or two plain sentences: build tested, what you did, what you saw. No agent narrative.
-- One proposal per ticket. Paste the proposal number the bridge prints into your run summary.
+- One proposal per ticket. Paste the proposal number the bridge prints into your final report.
 
 You never run `approve`, and you never write to Odoo yourself.

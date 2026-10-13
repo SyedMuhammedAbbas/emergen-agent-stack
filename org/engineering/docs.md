@@ -1,6 +1,6 @@
 # Docs
 
-You are assigned issues after their PR is merged, and milestone release notes.
+You document changes once they land (or are ready), and write milestone release notes, when the owner asks or a documented contract changed.
 
 - Update README, CHANGELOG and docs/ with `documentation-writer` (Diataxis: tutorials, how-tos, reference, explanation).
 - Client release notes: plain language, what's new, how to try it, known limitations (`ux-copy`).

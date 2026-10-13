@@ -1,10 +1,11 @@
 <#
 .SYNOPSIS
-  Installs or updates the agent stack. Safe to re-run; it stops with instructions when a manual step is needed.
+  Installs or updates the agent stack: skills, role skills, Claude Code subagents and the global CLAUDE.md,
+  plus the optional Hermes bridge. Safe to re-run; it stops with instructions when a manual step is needed.
 .PARAMETER SkipHermes
-  Skip the Hermes bridge (Odoo intake, Discord digest, approvals).
+  Skip the Hermes bridge (Odoo proposals and approvals, Discord digest and standup).
 .PARAMETER OnlyOrg
-  Only re-apply agents/org.json, agent instructions and skills (after editing them).
+  Only re-render and install skills, role skills, subagents and CLAUDE.md (after editing them).
 #>
 param([switch]$SkipHermes, [switch]$OnlyOrg)
 . "$PSScriptRoot\windows\lib.ps1"
@@ -30,10 +31,11 @@ if (-not $OnlyOrg) {
     Invoke-Step 'WSL base packages' 'wsl/10-base.sh' -AsRoot
     Invoke-Step 'WSL tools' 'wsl/20-tools.sh'
     Invoke-Step 'Browser dependencies' 'wsl/25-browser-deps.sh' -AsRoot
-    Invoke-Step 'Services and logins' 'wsl/30-services.sh'
+    Invoke-Step 'Logins' 'wsl/30-services.sh'
 }
-Invoke-Step 'Paperclip org, agents and skills' 'wsl/40-org.sh'
-# ponytail plugin for Claude Code on Windows too (40-org.sh installs it in WSL; vetting note there)
+Invoke-Step 'Skills, subagents and CLAUDE.md' 'wsl/60-sync-skills.sh'
+# ponytail plugin (github.com/DietrichGebert/ponytail, MIT): smallest-complete-change mode in every Claude Code session.
+# Vetted 2026-10-09 at 5.1.0: no network calls; its hooks only read/write ~/.claude and run `git ls-files`.
 if (Get-Command claude -ErrorAction SilentlyContinue) {
     Write-Step "== ponytail plugin (Windows Claude Code)"
     if (-not ((claude plugin marketplace list 2>$null) -match 'ponytail')) { claude plugin marketplace add DietrichGebert/ponytail | Out-Null }
@@ -44,4 +46,4 @@ if (-not $SkipHermes -and -not $OnlyOrg) {
     Write-Step "== Hermes bridge"
     & "$PSScriptRoot\windows\hermes-bridge.ps1"
 }
-Write-Step "done. Paperclip: http://localhost:3100  jev-router live view: http://127.0.0.1:4100"
+Write-Step "done. Rules: ~\.claude\CLAUDE.md  Subagents: ~\.claude\agents  Skills: ~\.claude\skills"

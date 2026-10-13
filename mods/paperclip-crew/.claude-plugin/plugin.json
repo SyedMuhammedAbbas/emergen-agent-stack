@@ -1,6 +1,0 @@
-{
-  "name": "paperclip-crew",
-  "version": "0.1.0",
-  "description": "A mini-bot for every Paperclip agent above the prompt: working, idle, paused or in error. Polls the local Paperclip API; no model calls, no tokens. /crew opens the full list.",
-  "types": "./types/index.d.ts"
-}

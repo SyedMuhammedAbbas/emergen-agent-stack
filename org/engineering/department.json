@@ -2,27 +2,8 @@
   "key": "engineering",
   "name": "Engineering",
   "description": "Builds, reviews, tests and ships client software.",
-  "head": "manager",
+  "head": "cto",
   "agents": [
-    {
-      "key": "manager",
-      "name": "Manager",
-      "role": "pm",
-      "title": "Engineering Manager",
-      "icon": "brain",
-      "model": "claude-sonnet-5",
-      "router": false,
-      "reportsTo": null,
-      "budgetCents": 300,
-      "heartbeat": true,
-      "skills": [
-        "delivery-gate",
-        "writing-plans",
-        "paperclip-converting-plans-to-tasks",
-        "odoo-tickets"
-      ],
-      "maxConcurrentRuns": 1
-    },
     {
       "key": "cto",
       "name": "CTO",

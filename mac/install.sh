@@ -6,7 +6,7 @@
 #   ./mac/install.sh --only-org      only re-apply org/ (agents, instructions, skills), e.g. after git pull
 #   ./mac/install.sh --skip-hermes   do not install the Hermes bridge
 #
-# Exits 3 when a manual step is needed (gh auth login, claude login, jev-router key); it prints the list.
+# Exits 3 when a manual step is needed (gh auth login, claude login); it prints the list.
 #
 # This file runs under macOS's bash 3.2 (no bash-4 features here). The shared scripts in wsl/ need bash 4+ and are
 # run with Homebrew's bash, which this script installs.
@@ -80,10 +80,10 @@ step() { # name script [args]
 }
 
 if [ $ONLY_ORG = 0 ]; then
-  step 'Tools (Node 24, Claude Code, Paperclip, jev-router, Playwright Chromium)' wsl/20-tools.sh
-  step 'Services and logins' wsl/30-services.sh
+  step 'Tools (Node 24, Claude Code, Playwright Chromium)' wsl/20-tools.sh
+  step 'Logins' wsl/30-services.sh
 fi
-step 'Paperclip org, agents and skills' wsl/40-org.sh
+step 'Skills, subagents and CLAUDE.md' wsl/60-sync-skills.sh
 
 if [ $ONLY_ORG = 0 ] && [ $SKIP_HERMES = 0 ]; then
   HH="${HERMES_HOME:-$(cfg_get HERMES_HOME)}"; HH="${HH:-$HOME/.hermes}"
@@ -93,4 +93,4 @@ if [ $ONLY_ORG = 0 ] && [ $SKIP_HERMES = 0 ]; then
     log "Hermes not found at $HH; skipped the bridge (install Hermes, then run ./mac/hermes-bridge.sh)"
   fi
 fi
-log "done. Paperclip: http://localhost:3100  jev-router live view: http://127.0.0.1:4100"
+log "done. Rules: ~/.claude/CLAUDE.md  Subagents: ~/.claude/agents  Skills: ~/.claude/skills"

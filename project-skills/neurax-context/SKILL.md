@@ -1,6 +1,6 @@
 ---
 name: neurax-context
-description: Project context for NuEraX / NeuraX (Odoo project 91, Paperclip project NeuraX). Load for ANY NeuraX work - requirements, PRD scope, milestones, payments/Stripe, mobile builds, device testing, staging.
+description: Project context for NuEraX / NeuraX (Odoo project 91). Load for ANY NeuraX work - requirements, PRD scope, milestones, payments/Stripe, mobile builds, device testing, staging.
 ---
 
 # NuEraX project context
