@@ -9,6 +9,7 @@ const path = require('path');
 const http = require('http');
 const { execFile } = require('child_process');
 const { DATA_DIR, gitInfo, localDate } = require('../lib');
+const board = require('./board');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.FACTORY_DASHBOARD_PORT || 7777);
@@ -310,6 +311,8 @@ function handler(req, res) {
   // loopback-only server; also refuse other Host headers (DNS rebinding)
   if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host || '')) return send(res, 403, { error: 'forbidden' });
   const days = Math.min(14, Math.max(1, Number(url.searchParams.get('days')) || 1));
+  const b = board.handle(req.method, url, { loadEvents });
+  if (b) return b.then(([code, body]) => send(res, code, body), (e) => send(res, 500, { error: e.message }));
   try {
     if (url.pathname === '/') return send(res, 200, fs.readFileSync(path.join(__dirname, 'index.html')), 'text/html; charset=utf-8');
     if (url.pathname === '/api') return send(res, 200, snapshot(days));

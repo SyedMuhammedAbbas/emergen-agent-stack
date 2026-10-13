@@ -28,15 +28,38 @@
   .grid2 { display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
   a { color:var(--accent); }
   .note { font-size:12px; color:var(--muted); margin-top:6px; }
+  nav { display:flex; gap:4px; } nav button { cursor:pointer; } nav button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+  .bar input[type=search] { font:inherit; color:inherit; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:4px 8px; min-width:0; flex:1 1 140px; max-width:260px; }
+  .tabs { display:flex; gap:4px; overflow-x:auto; max-width:100%; padding-bottom:2px; } .tabs button { white-space:nowrap; cursor:pointer; } .tabs button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .stale { background:color-mix(in srgb, var(--warn) 15%, transparent); border:1px solid var(--warn); border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+  #cols { display:flex; gap:10px; overflow-x:auto; align-items:flex-start; padding-bottom:8px; max-width:100%; }
+  .col { flex:0 0 264px; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px; display:grid; gap:8px; max-height:75vh; overflow-y:auto; }
+  .col.folded { flex-basis:160px; } .col h3 { margin:0; font-size:13px; display:flex; justify-content:space-between; gap:6px; align-items:center; }
+  .col h3 .n { color:var(--muted); font-weight:400; }
+  .kc { text-align:left; display:grid; gap:4px; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:8px; width:100%; cursor:pointer; font:inherit; color:inherit; }
+  .kc:hover, .kc:focus-visible { border-color:var(--accent); outline:none; }
+  .kc .t { overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .kc .row { display:flex; flex-wrap:wrap; gap:4px; align-items:center; font-size:12px; color:var(--muted); }
+  .chip { display:inline-block; padding:0 6px; border-radius:4px; border:1px solid var(--line); font-size:11px; color:var(--muted); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip.ok { color:var(--ok); border-color:var(--ok); } .chip.warn { color:var(--warn); border-color:var(--warn); } .chip.bad { color:var(--bad); border-color:var(--bad); } .chip.acc { color:var(--accent); border-color:var(--accent); }
+  .av { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; font-size:10px; font-weight:600; }
+  .late { color:var(--bad); font-weight:600; }
+  #drawer { position:fixed; top:0; right:0; bottom:0; width:min(520px, 100%); background:var(--card); border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.25); padding:16px; overflow-y:auto; z-index:5; }
+  #drawer[hidden], main[hidden] { display:none; }
+  #drawer h2 { text-transform:none; letter-spacing:0; font-size:16px; color:var(--fg); }
+  #drawer pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; margin:0 0 10px; }
+  #drawer .msg { border-top:1px solid var(--line); padding:6px 0; }
 </style>
 </head>
 <body>
 <header>
   <h1>Claude Factory</h1>
+  <nav><button type="button" data-view="overview">Overview</button><button type="button" data-view="board">Board</button></nav>
   <label>Window <select id="days"><option value="1">today</option><option value="2">2 days</option><option value="7">7 days</option></select></label>
   <span id="status" class="muted">loading…</span>
 </header>
-<main>
+<main id="overviewMain">
   <div class="grid2">
     <section><h2>Pending approvals</h2><div id="approvals" class="wrap"></div></section>
     <section><h2>Active agents</h2><div id="agents" class="wrap"></div></section>
@@ -50,6 +73,22 @@
     <section><h2>Open PRs (repos seen today)</h2><div id="prs" class="wrap"></div></section>
   </div>
 </main>
+<main id="boardMain" hidden>
+  <section>
+    <div class="bar"><div class="tabs" id="boardTabs" role="tablist" aria-label="Projects"></div><button id="discover" type="button" title="Add projects with open tasks assigned to you to boards.json">Discover projects</button></div>
+    <div class="bar">
+      <label>Assignee <select id="fAssignee"></select></label>
+      <input id="fText" type="search" placeholder="Search tickets" aria-label="Search tickets">
+      <label><input id="fActive" type="checkbox"> only with activity</label>
+      <button id="bRefresh" type="button">Refresh</button>
+      <span id="bStatus" class="muted"></span>
+    </div>
+    <div id="bStale" class="stale" hidden></div>
+    <div id="cols" aria-live="polite"></div>
+    <div class="note">Read-only view of Odoo. Stage changes go through Hermes approvals in Discord. Branch badges use local refs only (no fetch); "active now" means a telemetry event in the last 15 minutes.</div>
+  </section>
+</main>
+<aside id="drawer" role="dialog" aria-modal="false" aria-labelledby="dTitle" hidden></aside>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -97,6 +136,142 @@ async function loadPrs() {
   } catch (e) { $('prs').innerHTML = `<p class="muted">PR lookup failed: ${esc(e.message)}</p>`; }
 }
 refresh(); loadPrs(); setInterval(refresh, 5000);
+// ---------- Board tab ----------
+const B = { boards: [], id: null, data: null, owner: 7, done: false, taskId: null };
+try { B.id = Number(localStorage.getItem('boardId')) || null; } catch {}
+const bare = (t) => t.ticket ? String(t.title).replace(/^\d+:\s*/, '') : t.title; // Odoo titles already start with "371: "
+const initials = (n) => String(n || '?').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+function setView(v) {
+  $('overviewMain').hidden = v !== 'overview'; $('boardMain').hidden = v !== 'board';
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
+  if (location.hash !== '#' + v) history.replaceState(null, '', '#' + v);
+  if (v === 'board') loadBoard();
+}
+document.querySelectorAll('nav button').forEach((b) => { b.onclick = () => setView(b.dataset.view); });
+
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+  return j;
+}
+async function loadBoard(force) {
+  try {
+    if (!B.boards.length) {
+      const l = await api('/api/boards');
+      B.boards = l.boards; B.owner = l.owner;
+      if (!B.boards.some((b) => b.id === B.id)) B.id = (B.boards[0] || {}).id;
+      renderTabs();
+    }
+    if (!B.id) { $('cols').innerHTML = '<p class="muted">No boards configured. Use "Discover projects".</p>'; return; }
+    $('bStatus').textContent = 'loading…';
+    B.data = await api('/api/board?id=' + B.id + (force ? '&refresh=1' : ''));
+    renderBoard();
+  } catch (e) { $('bStatus').textContent = ''; $('bStale').hidden = false; $('bStale').textContent = 'Board unavailable: ' + e.message; }
+}
+function renderTabs() {
+  $('boardTabs').innerHTML = B.boards.map((b) => `<button type="button" role="tab" aria-selected="${b.id === B.id}" class="${b.id === B.id ? 'on' : ''}" data-id="${b.id}">${esc(b.name)}</button>`).join('');
+  $('boardTabs').querySelectorAll('button').forEach((x) => { x.onclick = () => { B.id = Number(x.dataset.id); B.data = null; B.done = false; try { localStorage.setItem('boardId', B.id); } catch {} renderTabs(); $('cols').innerHTML = '<p class="muted">loading…</p>'; loadBoard(); }; });
+}
+function fillAssignees() {
+  const sel = $('fAssignee'), cur = sel.value || 'me';
+  const users = B.data.users;
+  sel.innerHTML = `<option value="me">Me (${esc(users[B.owner] || 'owner')})</option><option value="all">Everyone</option><option value="none">Unassigned</option>`
+    + Object.entries(users).filter(([id]) => Number(id) !== B.owner).map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join('');
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : 'me';
+}
+function pass(t) {
+  const a = $('fAssignee').value, q = $('fText').value.trim().toLowerCase(), u = B.data.users;
+  if (a === 'me' && !t.assignees.includes(B.owner)) return false;
+  if (a === 'none' && t.assignees.length) return false;
+  if (!['me', 'all', 'none'].includes(a) && !t.assignees.includes(Number(a))) return false;
+  if ($('fActive').checked && !(t.badges && (t.badges.active || t.badges.job))) return false;
+  if (q) {
+    const hay = [t.title, t.ticket, t.milestone, ...t.tags.map((x) => B.data.tags[x]), ...t.assignees.map((x) => u[x]), ...((t.badges && t.badges.branches) || []).map((x) => x.name)].join(' ').toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
+}
+function badgeChips(bd) {
+  if (!bd) return '';
+  const out = [];
+  if (bd.active) out.push(`<span class="chip acc" title="last tool: ${esc(bd.active.tool)}, ${esc(ago(bd.active.ts))}">active now · ${esc(bd.active.agent)}</span>`);
+  if (bd.branches) {
+    const b = bd.branches[0];
+    const st = b.merged === null ? ['', 'unknown'] : b.atTip ? ['', 'at ' + B.data.board.integration + ' tip'] : b.merged ? ['ok', 'merged'] : ['warn', 'not merged'];
+    out.push(`<span class="chip ${st[0]}" title="${esc(b.name)}">branch · ${esc(st[1])}${bd.branches.length > 1 ? ' +' + (bd.branches.length - 1) : ''}</span>`);
+  }
+  if (bd.job) out.push(`<span class="chip">job · ${esc(bd.job.stage || '?')}</span>`);
+  if (bd.bucket) out.push(`<span class="chip">queue ${esc(bd.bucket)}</span>`);
+  return out.length ? `<div class="row">${out.join('')}</div>` : '';
+}
+function card(t, done) {
+  const d = B.data, names = t.assignees.map((x) => d.users[x] || '?');
+  const late = t.deadline && !done && t.deadline < today();
+  const meta = [
+    t.priority === '1' ? '<span class="chip bad">high</span>' : '',
+    t.deadline ? `<span class="${late ? 'late' : ''}" title="deadline">${late ? 'overdue ' : 'due '}${esc(t.deadline)}</span>` : '',
+    t.milestone ? `<span class="chip" title="milestone">${esc(t.milestone)}</span>` : '',
+  ].filter(Boolean).join('');
+  const av = names.map((n) => `<span class="av" title="${esc(n)}">${esc(initials(n))}</span>`).join('');
+  const tags = t.tags.map((x) => `<span class="chip">${esc(d.tags[x] || x)}</span>`).join('');
+  return `<button type="button" class="kc" data-id="${t.id}"><div class="t">${t.ticket ? `<b>#${esc(t.ticket)}</b> ` : ''}${esc(bare(t))}</div>${meta || av ? `<div class="row">${av}${meta}</div>` : ''}${tags ? `<div class="row">${tags}</div>` : ''}${badgeChips(t.badges)}</button>`;
+}
+function renderBoard() {
+  const d = B.data;
+  fillAssignees();
+  $('bStatus').textContent = `updated ${new Date(d.generated).toLocaleTimeString()}${d.stale ? '' : ` (Odoo data ${d.cachedFor}s old)`}`;
+  $('bStale').hidden = !d.stale;
+  if (d.stale) $('bStale').textContent = `Stale: Odoo could not be reached (${d.error}). Showing the last cached data from ${new Date(d.generated).toLocaleTimeString()}.`;
+  const filtering = $('fAssignee').value !== 'all' || $('fText').value || $('fActive').checked;
+  $('cols').innerHTML = d.columns.map((c) => {
+    const shown = c.tasks.filter(pass);
+    const n = filtering ? `${shown.length} of ${c.count}` : c.count;
+    if (c.done && !B.done) return `<div class="col folded"><h3><span>${esc(c.name)} <span class="n">${esc(n)}</span></span><button type="button" data-fold="1" aria-expanded="false">expand</button></h3></div>`;
+    const more = c.done && c.count > c.tasks.length ? `<div class="note">Showing the ${c.tasks.length} most recently updated of ${c.count}.</div>` : '';
+    return `<section class="col" aria-label="${esc(c.name)}"><h3><span>${esc(c.name)} <span class="n">${esc(n)}</span></span>${c.done ? '<button type="button" data-fold="1" aria-expanded="true">collapse</button>' : ''}</h3>${shown.map((t) => card(t, c.done)).join('') || '<span class="muted">No cards</span>'}${more}</section>`;
+  }).join('');
+  $('cols').querySelectorAll('[data-fold]').forEach((b) => { b.onclick = () => { B.done = !B.done; renderBoard(); }; });
+  $('cols').querySelectorAll('.kc').forEach((b) => { b.onclick = () => openTask(Number(b.dataset.id)); });
+}
+['fAssignee', 'fActive'].forEach((i) => { $(i).onchange = () => B.data && renderBoard(); });
+$('fText').oninput = () => B.data && renderBoard();
+$('bRefresh').onclick = () => loadBoard(true);
+$('discover').onclick = async () => {
+  try { await api('/api/boards/discover', { method: 'POST' }); B.boards = []; await loadBoard(); } catch (e) { $('bStatus').textContent = 'discover failed: ' + e.message; }
+};
+
+async function openTask(id) {
+  const t = B.data.columns.flatMap((c) => c.tasks).find((x) => x.id === id);
+  if (!t) return;
+  B.taskId = id;
+  const dr = $('drawer'), d = B.data, bd = t.badges || {};
+  const link = `${d.odooUrl}/odoo/project.task/${id}`;
+  const lines = [];
+  if (bd.active) lines.push(`Active now: ${bd.active.agent} (${bd.active.tool}, ${ago(bd.active.ts)}, project ${bd.active.project || '?'})`);
+  for (const b of bd.branches || []) lines.push(`Branch ${b.name} in ${b.repo} (${[b.local && 'local', b.remote && 'origin'].filter(Boolean).join(' + ')}): ${b.merged === null ? 'merge state unknown' : b.atTip ? 'same commit as origin/' + d.board.integration : b.merged ? 'merged into origin/' + d.board.integration : 'not merged into origin/' + d.board.integration}`);
+  if (bd.job) lines.push(`Factory job ${bd.job.id}: stage ${bd.job.stage || '?'}, round ${bd.job.round ?? 0}`);
+  if (bd.bucket) lines.push(`Work queue bucket ${bd.bucket}`);
+  dr.hidden = false;
+  dr.innerHTML = `<button type="button" id="dClose" style="float:right">close</button><h2 id="dTitle">${t.ticket ? '#' + esc(t.ticket) + ' ' : ''}${esc(bare(t))}</h2>
+    <p class="muted">${esc(t.state)} · ${t.assignees.map((x) => esc(d.users[x] || '?')).join(', ') || 'unassigned'}${t.deadline ? ' · due ' + esc(t.deadline) : ''}${t.milestone ? ' · ' + esc(t.milestone) : ''}</p>
+    <p><a href="${esc(link)}" target="_blank" rel="noopener">Open in Odoo</a></p>
+    <h2>Badges</h2>${lines.length ? '<ul>' + lines.map((l) => `<li>${esc(l)}</li>`).join('') + '</ul>' : '<p class="muted">No branch, activity, job or queue match.</p>'}
+    <h2>Description</h2><div id="dDesc" class="muted">loading…</div><h2>Latest messages</h2><div id="dMsgs" class="muted">loading…</div>`;
+  $('dClose').onclick = closeDrawer; $('dClose').focus();
+  try {
+    const r = await api('/api/board/task?id=' + id);
+    if (B.taskId !== id) return;
+    $('dDesc').className = ''; $('dDesc').innerHTML = r.description ? `<pre>${esc(r.description)}</pre>` : '<span class="muted">No description.</span>';
+    $('dMsgs').className = ''; $('dMsgs').innerHTML = r.messages.length ? r.messages.map((m) => `<div class="msg"><span class="muted">${esc(m.author || 'unknown')} · ${esc(time(m.date.replace(' ', 'T') + 'Z'))}</span><pre>${esc(m.text)}</pre></div>`).join('') : '<span class="muted">No messages.</span>';
+    if (r.stale) $('dMsgs').insertAdjacentHTML('afterbegin', '<div class="stale">Stale: ' + esc(r.error) + '</div>');
+  } catch (e) { if (B.taskId === id) { $('dDesc').textContent = 'Could not load: ' + e.message; $('dMsgs').textContent = ''; } }
+}
+function closeDrawer() { B.taskId = null; $('drawer').hidden = true; }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('drawer').hidden) closeDrawer(); });
+setInterval(() => { if (!$('boardMain').hidden && !document.hidden) loadBoard(); }, 15000);
+setView(['overview', 'board'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'overview');
 </script>
 </body>
 </html>

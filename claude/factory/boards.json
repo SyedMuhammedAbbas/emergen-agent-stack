@@ -1,0 +1,56 @@
+{
+  "owner": 7,
+  "boards": [
+    {
+      "id": 91,
+      "name": "NeuraX",
+      "repos": [
+        "D:\\Projects\\Emergen\\NeuraX\\neurax-backend",
+        "D:\\Projects\\Emergen\\NeuraX\\neurax-dashboard",
+        "D:\\Projects\\Emergen\\NeuraX\\neurax-app"
+      ],
+      "integration": "staging",
+      "queue": "D:\\Projects\\Emergen\\NeuraX\\.claude\\work-queue.md"
+    },
+    {
+      "id": 84,
+      "name": "Box Detailing",
+      "repos": [],
+      "integration": "main"
+    },
+    {
+      "id": 52,
+      "name": "Emergen Web",
+      "repos": [
+        "D:\\Projects\\Emergen\\emergen-webapp"
+      ],
+      "integration": "main"
+    },
+    {
+      "id": 96,
+      "name": "KhudMukhtaar",
+      "repos": [],
+      "integration": "main"
+    },
+    {
+      "id": 89,
+      "name": "KYC Resource Guide",
+      "repos": [
+        "D:\\Projects\\Emergen\\KYC.ResourceGuide"
+      ],
+      "integration": "main"
+    },
+    {
+      "id": 83,
+      "name": "Pro Elite Football Academy",
+      "repos": [],
+      "integration": "main"
+    },
+    {
+      "id": 88,
+      "name": "TailerAI",
+      "repos": [],
+      "integration": "main"
+    }
+  ]
+}

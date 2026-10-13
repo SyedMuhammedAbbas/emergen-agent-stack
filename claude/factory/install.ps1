@@ -10,10 +10,13 @@ $dst = Join-Path $env:USERPROFILE '.claude\factory'
 $node = (Get-Command node -ErrorAction Stop).Source
 
 $files = 'lib.js', 'telemetry.js', 'approval-gate.js', 'protected.json', 'pricing.json', 'install-hooks.js',
-         'dashboard\server.js', 'dashboard\index.html', 'dashboard\run-hidden.vbs'
+         'dashboard\server.js', 'dashboard\board.js', 'dashboard\index.html', 'dashboard\run-hidden.vbs'
 New-Item -ItemType Directory -Force (Join-Path $dst 'dashboard'), (Join-Path $dst 'data') | Out-Null
 foreach ($f in $files) { Copy-Item (Join-Path $src $f) (Join-Path $dst $f) -Force }
 Write-Host "Copied $($files.Count) files to $dst"
+# boards.json is the owner's to edit (repos, integration branch): seed it once, never overwrite
+$boards = Join-Path $dst 'boards.json'
+if (-not (Test-Path $boards)) { Copy-Item (Join-Path $src 'boards.json') $boards; Write-Host 'Seeded boards.json' }
 
 foreach ($dir in '.claude', '.claude-personal') {
   $settings = Join-Path $env:USERPROFILE "$dir\settings.json"
