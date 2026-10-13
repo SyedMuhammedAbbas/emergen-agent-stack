@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Factory</title>
+<style>
+  :root { --bg:#f7f7f5; --card:#fff; --fg:#1d1d1b; --muted:#6b6b66; --line:#e3e2dd; --accent:#c2541b; --ok:#2e7d32; --warn:#b26a00; --bad:#c62828; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --card:#1f1f1d; --fg:#ececea; --muted:#9a9a94; --line:#33332f; --accent:#ef8a4d; --ok:#66bb6a; --warn:#ffb74d; --bad:#ef5350; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:1; }
+  h1 { font-size:16px; margin:0; }
+  h2 { font-size:14px; margin:0 0 8px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  main { padding:16px; display:grid; gap:16px; max-width:1400px; margin:0 auto; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; min-width:0; }
+  .wrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; white-space:nowrap; }
+  td.wide { white-space:normal; min-width:220px; max-width:420px; overflow-wrap:anywhere; }
+  th { font-weight:600; color:var(--muted); font-size:12px; }
+  tr.click { cursor:pointer; } tr.click:hover, tr.sel { background:color-mix(in srgb, var(--accent) 10%, transparent); }
+  .muted { color:var(--muted); } .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; border:1px solid currentColor; }
+  .active { color:var(--ok); } .idle { color:var(--warn); } .ended { color:var(--muted); } .bad { color:var(--bad); }
+  select, button { font:inherit; color:inherit; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:4px 8px; }
+  code { font-size:12px; overflow-wrap:anywhere; }
+  .grid2 { display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
+  a { color:var(--accent); }
+  .note { font-size:12px; color:var(--muted); margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Claude Factory</h1>
+  <label>Window <select id="days"><option value="1">today</option><option value="2">2 days</option><option value="7">7 days</option></select></label>
+  <span id="status" class="muted">loading…</span>
+</header>
+<main>
+  <div class="grid2">
+    <section><h2>Pending approvals</h2><div id="approvals" class="wrap"></div></section>
+    <section><h2>Active agents</h2><div id="agents" class="wrap"></div></section>
+  </div>
+  <section><h2>Projects</h2><div id="projects" class="wrap"></div></section>
+  <section><h2>Sessions</h2><div id="sessions" class="wrap"></div>
+    <div class="note">Tokens and cost are read from the transcripts (parent + subagents, each message counted once). Cost is <b>estimated</b> from list API prices (<span id="pricing"></span>); it is not your subscription bill. n/a = model without a confirmed price.</div></section>
+  <section id="detailSec" hidden><h2>Session detail <button id="closeDetail" type="button">close</button></h2><div id="detail"></div></section>
+  <div class="grid2">
+    <section><h2>Errors</h2><div id="errors" class="wrap"></div></section>
+    <section><h2>Open PRs (repos seen today)</h2><div id="prs" class="wrap"></div></section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtN = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n || 0);
+const cost = (t) => t.messages && t.cost === 0 && t.unpriced ? 'n/a' : '$' + t.cost.toFixed(2) + (t.unpriced ? '*' : '');
+const ago = (ts) => { if (!ts) return ''; const s = (Date.now() - Date.parse(ts)) / 1000; return s < 60 ? Math.round(s) + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : s < 86400 ? (s / 3600).toFixed(1) + 'h ago' : (s / 86400).toFixed(1) + 'd ago'; };
+const dur = (ms) => { const m = Math.round(ms / 60000); return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm'; };
+const time = (ts) => ts ? new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+const table = (head, rows, empty) => rows.length ? `<table><thead><tr>${head.map((h) => `<th${h.startsWith('#') ? ' class="num"' : ''}>${esc(h.replace(/^#/, ''))}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>` : `<p class="muted">${empty}</p>`;
+const tok = (t) => `<td class="num" title="in ${t.input} / out ${t.output} / cache write ${t.cache_write} / cache read ${t.cache_read}">${fmtN(t.total)}</td><td class="num">${cost(t)}</td>`;
+let days = 1, selected = null;
+try { days = Number(localStorage.getItem('days')) || 1; } catch {}
+$('days').value = String(days);
+$('days').onchange = () => { days = Number($('days').value); try { localStorage.setItem('days', days); } catch {} refresh(); };
+$('closeDetail').onclick = () => { selected = null; $('detailSec').hidden = true; refresh(); };
+
+async function refresh() {
+  try {
+    const d = await (await fetch('/api?days=' + days)).json();
+    $('status').textContent = `updated ${new Date(d.generated).toLocaleTimeString()} · ${d.sessions.length} sessions`;
+    $('pricing').innerHTML = `<a href="${esc(d.pricing.source)}" target="_blank" rel="noopener">pricing</a> as of ${esc(d.pricing.retrieved)}`;
+    $('approvals').innerHTML = table(['Where', 'Project', 'What', 'Status'], d.approvals.map((a) => `<tr><td>${a.source === 'discord' ? 'Discord #' + esc(a.n) : 'session prompt'}</td><td>${esc(a.project)}</td><td class="wide"><code>${esc(a.what)}</code></td><td>${esc(a.status || ago(a.ts))}</td></tr>`), 'Nothing waiting.');
+    $('agents').innerHTML = table(['Type', 'Project', 'Running for', 'Session'], d.agents.map((a) => `<tr><td>${esc(a.agent_type)}</td><td>${esc(a.project)}</td><td>${ago(a.since).replace(' ago', '')}</td><td class="muted">${esc(a.session.slice(0, 8))}</td></tr>`), 'No subagents running.');
+    $('projects').innerHTML = table(['Project', '#Sessions', '#Active', '#Tokens', '#Est. cost', 'Last activity'], d.projects.map((p) => `<tr><td>${esc(p.project)}</td><td class="num">${p.sessions}</td><td class="num">${p.active}</td>${tok(p.tokens)}<td>${ago(p.last)}</td></tr>`), 'No sessions in this window.');
+    $('sessions').innerHTML = table(['Status', 'Project', 'Title', 'Model', 'Start', 'Duration', 'Stage', '#Tokens', '#Est. cost', 'Branch / diff'], d.sessions.map((s) => `<tr class="click${s.id === selected ? ' sel' : ''}" data-id="${esc(s.id)}"><td><span class="pill ${s.status}">${s.status}</span></td><td>${esc(s.project)}</td><td class="wide">${esc(s.title.slice(0, 120)) || '<span class="muted">(untitled)</span>'}${s.subagents ? ` <span class="muted">+${s.subagents} subagents</span>` : ''}</td><td>${esc(s.models.map((m) => m.replace(/^claude-/, '')).join(', '))}</td><td>${time(s.start)}</td><td>${dur(s.duration_ms)}</td><td class="wide">${esc(s.stage)}${s.last_tool ? `<br><span class="muted">${esc(s.last_tool)}</span>` : ''}${s.hooked ? '' : '<br><span class="muted">no hook events (transcript only)</span>'}</td>${tok(s.tokens)}<td class="wide">${esc(s.branch || '')}${s.diff ? `<br><span class="muted">${esc(s.diff)}</span>` : ''}</td></tr>`), 'No sessions in this window.');
+    document.querySelectorAll('#sessions tr.click').forEach((tr) => { tr.onclick = () => { selected = tr.dataset.id; detail(); refresh(); }; });
+    $('errors').innerHTML = table(['When', 'Project', 'Tool', 'Error'], d.errors.map((e) => `<tr><td>${ago(e.ts)}</td><td>${esc(e.project)}</td><td>${esc(e.tool || e.event)}</td><td class="wide"><span class="bad">${esc(e.error)}</span>${e.summary ? `<br><code>${esc(e.summary)}</code>` : ''}</td></tr>`), 'No tool failures.');
+    if (selected) detail();
+  } catch (e) { $('status').textContent = 'dashboard unreachable: ' + e.message; }
+}
+
+async function detail() {
+  const d = await (await fetch('/api/session?id=' + encodeURIComponent(selected) + '&days=' + days)).json();
+  $('detailSec').hidden = false;
+  const parts = d.usage ? table(['File', '#Messages', '#Input', '#Output', '#Cache write', '#Cache read', '#Tokens', '#Est. cost'], d.usage.parts.map((p) => `<tr><td>${esc(p.agent)}</td><td class="num">${p.messages}</td><td class="num">${fmtN(p.input)}</td><td class="num">${fmtN(p.output)}</td><td class="num">${fmtN(p.cache_write)}</td><td class="num">${fmtN(p.cache_read)}</td>${tok(p)}</tr>`).concat(`<tr><td><b>total</b></td><td class="num">${d.usage.totals.messages}</td><td class="num">${fmtN(d.usage.totals.input)}</td><td class="num">${fmtN(d.usage.totals.output)}</td><td class="num">${fmtN(d.usage.totals.cache_write)}</td><td class="num">${fmtN(d.usage.totals.cache_read)}</td>${tok(d.usage.totals)}</tr>`), '') : '<p class="muted">No transcript found.</p>';
+  const tl = table(['Time', 'Event', 'Tool', 'Detail'], d.events.slice().reverse().filter((e) => e.event !== 'PostToolUse').slice(0, 200).map((e) => `<tr><td>${new Date(e.ts).toLocaleTimeString()}</td><td${e.error ? ' class="bad"' : ''}>${esc(e.event)}</td><td>${esc(e.tool_name || e.agent_type || '')}</td><td class="wide">${esc(e.tool || e.error_text || e.message || e.prompt || e.reason || e.diff || '')}</td></tr>`), 'No hook events for this session (hooks were not installed when it ran).');
+  $('detail').innerHTML = `<p class="muted"><code>${esc(d.id)}</code></p>${parts}<h2 style="margin-top:12px">Timeline (latest first)</h2><div class="wrap">${tl}</div>`;
+}
+
+async function loadPrs() {
+  try {
+    const d = await (await fetch('/api/prs')).json();
+    const rows = d.flatMap((r) => r.error ? [`<tr><td>${esc(r.project)}</td><td class="wide muted" colspan="2">${esc(r.error)}</td></tr>`] : r.prs.map((p) => `<tr><td>${esc(r.project)}</td><td><a href="${esc(p.url)}" target="_blank" rel="noopener">#${esc(p.number)}</a> ${esc(p.title)}</td><td class="muted">${esc(p.headRefName)}</td></tr>`));
+    $('prs').innerHTML = table(['Repo', 'PR', 'Branch'], rows, 'No open PRs by you in repos seen today.');
+  } catch (e) { $('prs').innerHTML = `<p class="muted">PR lookup failed: ${esc(e.message)}</p>`; }
+}
+refresh(); loadPrs(); setInterval(refresh, 5000);
+</script>
+</body>
+</html>

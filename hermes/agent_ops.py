@@ -413,11 +413,30 @@ def find_employee(odoo: Odoo, name: str) -> int:
     return ids[0]
 
 
+def is_claude_action(it: dict) -> bool:
+    return it.get("kind") == "proposal" and any(a.get("type") == "claude_action" for a in it.get("actions", []))
+
+
+def record_claude_decision(it: dict, status: str) -> None:
+    """Hermes state is the only place the approval gate trusts; nothing goes to Odoo."""
+    a = it["actions"][0]
+    approvals = read_state("claude_approvals", {})
+    approvals[a["key"]] = {"n": it["n"], "status": status, "at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                           "title": it["title"], "command": a["command"], "cwd": a.get("cwd")}
+    write_state("claude_approvals", approvals)
+
+
 def approve(cfg, items, dry_run=False):
-    odoo = Odoo()
-    emp = find_employee(odoo, cfg["timesheet_employee"])
-    today = dt.date.today().isoformat()
     done, lines = set(), []
+    for it in [i for i in items if is_claude_action(i)]:
+        if not dry_run:
+            record_claude_decision(it, "approved")
+        lines.append(f"✅ Approval {it['n']} granted: {it['title']}. The session may run it once within 24 h.")
+        done.add(it["issue_id"])
+    items = [i for i in items if not is_claude_action(i)]
+    odoo = Odoo() if items else None
+    emp = find_employee(odoo, cfg["timesheet_employee"]) if items else None
+    today = dt.date.today().isoformat()
     for it in [i for i in items if i.get("kind") == "proposal"]:
         lines.append(execute_proposal(odoo, emp, it, dry_run))
         done.add(it["issue_id"])
@@ -470,6 +489,9 @@ def approve(cfg, items, dry_run=False):
 #   {"type": "create_tag", "name": "agent-ready"},
 #   {"type": "evidence", "task": 28020, "note": "Verified on staging build 12: ...",
 #    "files": ["/mnt/d/Projects/.../_qa-evidence/Ticket#295/01-block.png", "D:\\...\\02-exit.mp4"]}]}
+# "claude_action" (alone in its proposal, queued by the Claude Code approval gate):
+#   {"type": "claude_action", "command": "git push origin staging", "cwd": "...", "project": "...", "session_id": "...", "key": "<sha256>"}
+#   approve/reject only record the decision in claude_approvals.json; nothing is written to Odoo.
 # "task"/"parent" may be an Odoo task id or the "ref" of a create_task earlier in the same proposal.
 # "project" (name) or "project_id"; "milestone" by id or exact name. New tasks are assigned to the bridge's
 # Odoo user (you) unless "assign_me": false.
@@ -477,7 +499,7 @@ def approve(cfg, items, dry_run=False):
 # approvals channel so they can be reviewed; only on approve are they attached to the Odoo task
 # (ir.attachment) with the note in its chatter.
 
-ACTION_TYPES = {"create_task", "update_task", "timesheet", "stage", "note", "create_tag", "evidence"}
+ACTION_TYPES = {"create_task", "update_task", "timesheet", "stage", "note", "create_tag", "evidence", "claude_action"}
 EVIDENCE_MAX_BYTES = 50 * 1024 * 1024      # per file, Odoo attachment
 EVIDENCE_MAX_FILES = 8                   # proof is a small, chosen set (qa-evidence skill)
 DISCORD_MAX_BYTES = 9_500_000             # per file, Discord bot upload (10 MB limit)
@@ -638,6 +660,8 @@ def describe_action(a: dict) -> str:
         note = _plain(a.get("note", ""))
         return (f"Attach {what} to {_task_label(a['task'])} as test proof"
                 + (f": {note[:160]}{'...' if len(note) > 160 else ''}" if note else ""))
+    if t == "claude_action":
+        return f"Let a Claude Code session in {a.get('project') or 'a project'} run: `{a['command'][:300].replace('`', chr(39))}`"
     return f"Create the Odoo tag “{a['name']}”"
 
 
@@ -668,6 +692,13 @@ def cmd_propose(args, from_chat=False):
     bad = [a for a in actions if a.get("type") not in ACTION_TYPES]
     if not actions or bad:
         raise SystemExit(f"Proposal needs actions of types {sorted(ACTION_TYPES)}; bad: {bad[:2]}")
+    if any(a["type"] == "claude_action" for a in actions):
+        if len(actions) != 1 or not actions[0].get("command") or not actions[0].get("key"):
+            raise SystemExit("claude_action must be the only action and needs command and key")
+        same = [p for p in read_state("pending", []) if is_claude_action(p) and p["actions"][0].get("key") == actions[0]["key"]]
+        if same:  # the session re-ran the command before approval: keep the number the owner already saw
+            print(format_proposal(same[0]))
+            return
     refs = {a["ref"] for a in actions if a["type"] == "create_task" and a.get("ref")}
     for a in actions:
         for k in ("task", "parent"):
@@ -742,7 +773,9 @@ def format_proposal(it: dict) -> str:
     lines += [f"• {describe_action(a)}" for a in it["actions"][:25]]
     if count > 25:
         lines.append(f"• ...and {count - 25} more")
-    lines.append(f"Reply `approve {it['n']}` to apply this in Odoo, or `reject {it['n']}` to drop it.")
+    lines.append(f"Reply `approve {it['n']}` to let it run once (valid 24 h), or `reject {it['n']}` to keep it blocked."
+                 if is_claude_action(it) else
+                 f"Reply `approve {it['n']}` to apply this in Odoo, or `reject {it['n']}` to drop it.")
     return "\n".join(lines)
 
 
@@ -906,6 +939,11 @@ def cmd_reject(cfg, args, dry_run):
     items = select(args[0])
     reason = " ".join(args[1:]) or "Rejected in the daily digest."
     for it in items:
+        if is_claude_action(it):
+            if not dry_run:
+                record_claude_decision(it, "rejected")
+            print(f"{'(dry run) ' if dry_run else ''}❌ Approval {it['n']} rejected: {it['title']}. The command stays blocked.")
+            continue
         if it.get("kind") == "proposal":
             print(f"{'(dry run) ' if dry_run else ''}❌ Approval {it['n']} dropped: {it['title']}. Nothing was changed in Odoo.")
             continue
